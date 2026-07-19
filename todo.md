@@ -9,11 +9,11 @@ Software-only simulation first; hardware integration deferred to Phase 7.
 ## Phase 0 — Repo & Foundation
 Goal: scaffold the monorepo, licensing, and CI so later phases have somewhere to land.
 
-- [ ] Monorepo layout: Rust workspace (`antenna-control/`, `orbital-mechanics/`) + Go module (`routing/`, `space-ai-bridge/`)
-- [ ] Dual license setup: `LICENSE-MIT`, `LICENSE-APACHE`, SPDX headers on source files, TPT Solutions copyright
-- [ ] README: project overview, architecture summary, contributing guide stub
-- [ ] Basic CI: build + test for Rust workspace and Go module
-- [ ] `.gitignore`, `.editorconfig`, issue/PR templates
+- [x] Monorepo layout: Rust workspace (`antenna-control/`, `orbital-mechanics/`) + Go module (`routing/`, `space-ai-bridge/`)
+- [x] Dual license setup: `LICENSE-MIT`, `LICENSE-APACHE`, SPDX headers on source files, TPT Solutions copyright
+- [x] README: project overview, architecture summary, contributing guide stub
+- [x] Basic CI: build + test for Rust workspace and Go module
+- [x] `.gitignore`, `.editorconfig`, issue/PR templates
 
 ## Phase 1 — Orbital Mechanics Engine (Rust, simulation-only)
 Goal: predict satellite positions and visibility windows without any live data feed.

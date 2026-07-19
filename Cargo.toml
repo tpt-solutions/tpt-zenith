@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "antenna-control",
+    "orbital-mechanics",
+]
+
+[workspace.package]
+authors = ["TPT Solutions"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/TPT-Solutions/tpt-zenith"
+version = "0.0.0"
+
+[workspace.dependencies]
