@@ -1,0 +1,31 @@
+Design Document: TPT Zenith
+Project Name: TPT Zenith (Open-Source Ground Station Control & Orbital Routing)
+Industry: Space Infrastructure & Satellite Communications
+Status: Phase 1 Design / Pre-Alpha
+1. Executive Summary
+The physical ground stations (massive dish arrays) and orbital routing software that beam data to satellites are heavily proprietary (AWS Ground Station, Kratos, Viasat). They cost millions to deploy, are locked into specific satellite constellations, and cannot dynamically route data between space-based AI nodes and terrestrial networks.
+TPT Zenith is an open-source ground station control system and orbital routing protocol. It manages physical dish arrays, tracks satellite constellations (Starlink, OneWeb, custom LEO constellations), and routes data between space-based AI inference nodes and TPT Aether basestations on Earth. It enables "Orbital Edge Compute"—running AI models directly on satellites to avoid beaming raw data to Earth.
+2. System Architecture
+Core Components:
+The Antenna Control System (Rust): Bare-metal Rust agents running on the microcontrollers inside dish antennas. They execute deterministic tracking loops, following satellites across the sky with sub-degree precision.
+The Orbital Mechanics Engine: A high-fidelity propagator (using SGP4/SDP4 models) that predicts satellite positions, calculates visibility windows, and optimizes handoffs between satellites.
+The RF Signal Processing Pipeline: Software-defined radio (SDR) stack that handles modulation/demodulation, error correction, and frequency hopping for secure satellite communications.
+The Orbital Routing Protocol: A delay-tolerant networking (DTN) protocol that routes data packets through the satellite mesh network. It handles the massive latency and intermittent connectivity of space-based networks.
+The Space-AI Bridge: An API layer that allows AI models to be uploaded to satellites for on-orbit inference. The satellite processes the data (e.g., Earth observation imagery) and sends only the results to Earth, saving bandwidth.
+Target Tech Stack:
+Antenna Control Language: Rust (bare-metal, deterministic for real-time tracking)
+Backend/Routing Language: Go (for handling massive concurrent connections and DTN routing)
+Orbital Mechanics: poliastro (Python library, wrapped in Rust for performance) or custom SGP4 implementation
+SDR Framework: GNU Radio (for RF signal processing) or custom Rust SDR stack
+Protocols: CCSDS (Consultative Committee for Space Data Systems) standards, DTN (Delay-Tolerant Networking), TCP/UDP over satellite links
+Hardware: Standard dish antennas with custom Rust-based controllers, SDR hardware (Ettus USRP, HackRF)
+3. Integration with TPT Ecosystem
+TPT Aether (Terrestrial Network): TPT Zenith routes data from satellites to TPT Aether basestations on Earth
+TPT DataCenter (Compute): Zenith sends processed satellite data to DataCenter for storage and analysis
+TPT Sentinel (Defense): Zenith provides secure satellite communications for military C4ISR
+The Link: Zenith is the bridge between space and Earth. It takes data from satellites, routes it through Aether, and stores it in DataCenter.
+4. Market Disruption
+LEO Constellation Operators: Can build ground station networks without paying AWS Ground Station millions in fees
+Earth Observation Startups: Can use the Space-AI Bridge to process satellite imagery on-orbit, reducing bandwidth costs by 90%
+Sovereign Space: Nations can build their own satellite communication infrastructure without vendor lock-in
+Scientific Research: Universities can track and communicate with CubeSats using open-source tools instead of proprietary ground station software
