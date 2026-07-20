@@ -62,9 +62,9 @@ Goal: define and simulate the modem/error-correction chain before touching real 
 ## Phase 5 — Space-AI Bridge (on-orbit inference API)
 Goal: demonstrate on-orbit inference and bandwidth savings, over the routing layer, in simulation.
 
-- [ ] API layer for model upload + inference request/response over DTN routing
-- [ ] Simulated "satellite compute node" running a mock/lightweight model
-- [ ] Bandwidth savings demonstration (raw vs processed payload size comparison)
+- [x] API layer for model upload + inference request/response over DTN routing — `space-ai-bridge` package: `Client`/`Responder` build and parse DTN bundles (`routing/bundle`) carrying CBOR-encoded `ModelUpload`/`InferenceRequest`/`InferenceResponse` messages; `Responder` adapts a `ComputeNode` into a `sim.AppHandler` (new `AppHandler`/`OutboundBundle`/`Mesh.SetHandler` extension point added to `routing/sim/mesh.go`) so replies get routed back through the simulated mesh like any other bundle
+- [x] Simulated "satellite compute node" running a mock/lightweight model — `ComputeNode` holds deployed models and on-orbit-captured scenes; two built-in model kinds (`scene-stats`: compact summary statistics/histogram of a scene; `cloud-mask`: cloud-cover fraction + classification), both collapsing megapixel-scale input to tens of bytes of output
+- [x] Bandwidth savings demonstration (raw vs processed payload size comparison) — `InferenceResponse.BandwidthSavings()`; the end-to-end test (`TestOnOrbitInferenceOverDTN`) uploads a model and requests inference over a simulated multi-pass contact plan (with the response necessarily stored on-orbit across a coverage gap) and asserts >90% bandwidth savings on a 1 MiB scene
 
 ## Phase 6 — TPT Ecosystem Integration
 Goal: wire Zenith into the rest of the TPT stack.

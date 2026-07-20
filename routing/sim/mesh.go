@@ -20,14 +20,39 @@ import (
 
 // Mesh is a simulated network of DTN nodes sharing a single contact plan.
 type Mesh struct {
-	nodes   map[string]*node.Node
-	plan    *cgr.ContactPlan
-	pending []injection
+	nodes    map[string]*node.Node
+	plan     *cgr.ContactPlan
+	pending  []injection
+	handlers map[string]AppHandler
 }
+
+// OutboundBundle is a bundle an application handler wants to introduce into the
+// mesh in response to a delivery, originating at FromNode no earlier than At.
+type OutboundBundle struct {
+	FromNode string
+	Bundle   *bundle.Bundle
+	At       time.Time
+}
+
+// AppHandler is an application callback invoked when a bundle is delivered to a
+// node that has one registered. It may return zero or more reply bundles to be
+// routed back through the mesh. This is what lets a satellite compute node run
+// on-orbit inference and return results over the DTN layer.
+type AppHandler func(deliveredTo string, b *bundle.Bundle, now time.Time) []OutboundBundle
 
 // NewMesh creates a mesh backed by the given contact plan.
 func NewMesh(plan *cgr.ContactPlan) *Mesh {
 	return &Mesh{nodes: map[string]*node.Node{}, plan: plan}
+}
+
+// SetHandler registers an application handler for a node. The node is created if
+// it does not yet exist.
+func (m *Mesh) SetHandler(nodeID string, h AppHandler) {
+	if m.handlers == nil {
+		m.handlers = map[string]AppHandler{}
+	}
+	m.AddNode(nodeID)
+	m.handlers[nodeID] = h
 }
 
 // AddNode registers a node with the given node ID (for example "dtn://sat-7").
@@ -145,6 +170,18 @@ func (m *Mesh) Run() Report {
 			report.Deliveries = append(report.Deliveries, Delivery{
 				BundleID: ev.b.ID(), Node: ev.nodeID, Time: ev.time, Payload: ev.b.Payload(),
 			})
+			if h := m.handlers[ev.nodeID]; h != nil {
+				for _, ob := range h(ev.nodeID, ev.b, ev.time) {
+					if ob.Bundle == nil {
+						continue
+					}
+					when := ob.At
+					if when.Before(ev.time) {
+						when = ev.time
+					}
+					heap.Push(eq, meshEvent{time: when, nodeID: ob.FromNode, b: ob.Bundle, injected: true})
+				}
+			}
 		case node.ResultDuplicate:
 			report.Events = append(report.Events, Event{
 				Time: ev.time, Node: ev.nodeID, Kind: EventDuplicate, BundleID: ev.b.ID(),
