@@ -12,5 +12,6 @@ repository.workspace = true
 description = "Deterministic antenna tracking loop with a simulated dish backend (Phase 3)."
 
 [dependencies]
+orbital-mechanics = { path = "../orbital-mechanics" }
 
 [dev-dependencies]

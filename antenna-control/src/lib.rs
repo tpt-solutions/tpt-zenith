@@ -12,4 +12,7 @@
 pub mod hal;
 pub mod tracking;
 
-pub use crate::hal::DishBackend;
+pub use crate::hal::{
+    DishBackend, DishError, DishLimits, DishState, PointingCommand, SimulatedDish,
+};
+pub use crate::tracking::{TrackConfig, TrackSample, Tracker, TrackingReport};
