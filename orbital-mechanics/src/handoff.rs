@@ -6,7 +6,7 @@
 //! tracked satellite sets below the horizon.
 
 use crate::propagator::Propagator;
-use crate::visibility::{visibility_windows, GroundStation, VisibilityWindow};
+use crate::visibility::{look_angles, visibility_windows, GroundStation, VisibilityWindow};
 
 /// A scheduled handoff from one satellite to the next.
 #[derive(Debug, Clone)]
@@ -45,20 +45,25 @@ pub fn plan_handoffs(
     for (from, from_windows) in windows.iter().enumerate() {
         for w in from_windows {
             let los = w.los_tsince_min;
-            // Candidate: any other satellite visible (above mask) at `los`.
+            // Candidate: any other satellite visible (above mask) at `los`,
+            // ranked by its actual elevation at that instant.
             let mut best: Option<(usize, f64)> = None;
             for (to, to_windows) in windows.iter().enumerate() {
                 if to == from {
                     continue;
                 }
-                for tw in to_windows {
-                    if los >= tw.aos_tsince_min && los <= tw.los_tsince_min {
-                        let elev = tw.max_elevation_deg; // proxy for "visible now"
-                        if best.map_or(true, |b| elev > b.1) {
-                            best = Some((to, elev));
-                        }
-                        break;
-                    }
+                if !to_windows
+                    .iter()
+                    .any(|tw| los >= tw.aos_tsince_min && los <= tw.los_tsince_min)
+                {
+                    continue;
+                }
+                let Ok(state) = satellites[to].propagate(los) else {
+                    continue;
+                };
+                let elev = look_angles(station, &state, satellites[to].gmst_rad(los)).elevation_deg;
+                if best.map_or(true, |b| elev > b.1) {
+                    best = Some((to, elev));
                 }
             }
             if let Some((to, elev)) = best {

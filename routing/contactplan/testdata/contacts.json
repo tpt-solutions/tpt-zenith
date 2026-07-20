@@ -1,0 +1,20 @@
+{
+  "epoch": "2024-01-15T12:00:00Z",
+  "satellite": "dtn://sat-25544",
+  "contacts": [
+    {"from": "dtn://ground-tokyo", "to": "dtn://sat-25544", "start_min": 718.0000, "end_min": 724.7997, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 1.389, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-tokyo", "start_min": 718.0000, "end_min": 724.7997, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 1.389, "confidence": 1.0},
+    {"from": "dtn://ground-tokyo", "to": "dtn://sat-25544", "start_min": 817.0000, "end_min": 820.3372, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 4.373, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-tokyo", "start_min": 817.0000, "end_min": 820.3372, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 4.373, "confidence": 1.0},
+    {"from": "dtn://ground-tokyo", "to": "dtn://sat-25544", "start_min": 1109.5000, "end_min": 1115.5924, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 2.581, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-tokyo", "start_min": 1109.5000, "end_min": 1115.5924, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 2.581, "confidence": 1.0},
+    {"from": "dtn://ground-tokyo", "to": "dtn://sat-25544", "start_min": 1206.5000, "end_min": 1212.0000, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 3.141, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-tokyo", "start_min": 1206.5000, "end_min": 1212.0000, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 3.141, "confidence": 1.0},
+    {"from": "dtn://ground-kauai", "to": "dtn://sat-25544", "start_min": 435.5000, "end_min": 441.9222, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 1.880, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-kauai", "start_min": 435.5000, "end_min": 441.9222, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 1.880, "confidence": 1.0},
+    {"from": "dtn://ground-kauai", "to": "dtn://sat-25544", "start_min": 929.2300, "end_min": 934.4519, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 3.464, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-kauai", "start_min": 929.2300, "end_min": 934.4519, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 3.464, "confidence": 1.0},
+    {"from": "dtn://ground-kauai", "to": "dtn://sat-25544", "start_min": 1026.0000, "end_min": 1030.9795, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 3.573, "confidence": 1.0},
+    {"from": "dtn://sat-25544", "to": "dtn://ground-kauai", "start_min": 1026.0000, "end_min": 1030.9795, "data_rate_bytes_per_sec": 125000.0, "owlt_ms": 3.573, "confidence": 1.0}
+  ]
+}

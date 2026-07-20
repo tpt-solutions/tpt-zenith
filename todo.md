@@ -37,11 +37,11 @@ Goal: predict satellite positions and visibility windows without any live data f
 ## Phase 2 — Orbital Routing Protocol (Go, DTN7/Bundle Protocol RFC 9171)
 Goal: route data through a simulated intermittent satellite mesh using contact schedules from Phase 1.
 
-- [ ] Bundle Protocol primitives (bundle format, endpoint IDs, creation timestamps)
-- [ ] Store-and-forward node with contact-graph routing
-- [ ] Simulated multi-node mesh (satellite + ground station nodes)
-- [ ] CLI/test harness: send a bundle through simulated intermittent links, confirm delivery
-- [ ] Integration test: Phase 1 visibility windows feed routing contact schedule end-to-end
+- [x] Bundle Protocol primitives (bundle format, endpoint IDs, creation timestamps)
+- [x] Store-and-forward node with contact-graph routing
+- [x] Simulated multi-node mesh (satellite + ground station nodes)
+- [x] CLI/test harness: send a bundle through simulated intermittent links, confirm delivery
+- [x] Integration test: Phase 1 visibility windows feed routing contact schedule end-to-end
 
 ## Phase 3 — Antenna Control System (Rust, simulated hardware)
 Goal: deterministic tracking loop against a simulated dish, ready for real hardware later.

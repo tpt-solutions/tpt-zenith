@@ -143,7 +143,7 @@ pub fn visibility_windows(
 
     while t <= end_min + 1e-9 {
         let state = sat.propagate(t)?;
-        let gmst = gmst_at(t);
+        let gmst = sat.gmst_rad(t);
         let la = look_angles(station, &state, gmst);
         let visible = la.elevation_deg >= mask;
 
@@ -184,14 +184,14 @@ fn build_window(
     for k in 0..=n {
         let tt = aos + span * (k as f64) / (n as f64);
         let st = sat.propagate(tt).ok()?;
-        let la = look_angles(station, &st, gmst_at(tt));
+        let la = look_angles(station, &st, sat.gmst_rad(tt));
         if la.elevation_deg > max_elev {
             max_elev = la.elevation_deg;
             best_t = tt;
         }
     }
     let best_state = sat.propagate(best_t).ok()?;
-    let best_look = look_angles(station, &best_state, gmst_at(best_t));
+    let best_look = look_angles(station, &best_state, sat.gmst_rad(best_t));
     Some(VisibilityWindow {
         aos_tsince_min: aos,
         los_tsince_min: los,
@@ -220,23 +220,14 @@ fn refine_crossing(
     let st_m = sat.propagate(guess - h).ok();
     let st_p = sat.propagate(guess + h).ok();
     if let (Some(a), Some(b)) = (st_m, st_p) {
-        let em = look_angles(station, &a, gmst_at(guess - h)).elevation_deg;
-        let ep = look_angles(station, &b, gmst_at(guess + h)).elevation_deg;
+        let em = look_angles(station, &a, sat.gmst_rad(guess - h)).elevation_deg;
+        let ep = look_angles(station, &b, sat.gmst_rad(guess + h)).elevation_deg;
         let deriv = (ep - em) / (2.0 * h);
         if deriv.abs() > 1e-9 {
             return (guess - (e1 - mask) / deriv).clamp(t0, t1);
         }
     }
     guess
-}
-
-/// Approximate Greenwich Mean Sidereal Time (radians) at `tsince_min` after
-/// the J2000 reference. A simplified linear model is adequate for simulation.
-pub fn gmst_at(tsince_min: f64) -> f64 {
-    // GMST at J2000 = 280.46 deg; Earth rotates 360.9856 deg/day.
-    let days = tsince_min / MIN_PER_DAY;
-    let deg = 280.46 + 360.985647366 * (days + 0.0);
-    (deg * DEG2RAD).rem_euclid(2.0 * std::f64::consts::PI)
 }
 
 #[cfg(test)]

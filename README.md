@@ -65,6 +65,25 @@ go build ./...
 go test ./...
 ```
 
+### Orbital routing demo (Phase 2)
+
+Run the DTN store-and-forward harness with its built-in intermittent-mesh
+scenario:
+
+```sh
+go run ./routing/cmd/zenith-dtn
+```
+
+Or drive it with a contact plan exported from the Phase 1 orbital-mechanics
+engine (visibility windows → DTN contacts), demonstrating the end-to-end
+Phase 1 → Phase 2 data flow:
+
+```sh
+cargo run -p orbital-mechanics --bin export_contacts > contacts.json
+go run ./routing/cmd/zenith-dtn -plan contacts.json \
+    -src dtn://ground-tokyo/out -dst dtn://ground-kauai/inbox -payload "hello"
+```
+
 ## Contributing
 
 Contributions are welcome. Please read the issue and pull request templates and
