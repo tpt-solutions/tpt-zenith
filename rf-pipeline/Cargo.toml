@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 TPT Solutions
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[package]
+name = "rf-pipeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "RF signal processing pipeline: modem, error correction, and CCSDS-style framing (simulation-only)."
+
+[dependencies]
+
+[dev-dependencies]

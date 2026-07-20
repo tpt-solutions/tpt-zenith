@@ -17,7 +17,7 @@ to Phase 7.
 | Orbital Mechanics Engine | Rust | 1 | SGP4/SDP4 propagator, visibility windows, handoff optimization |
 | Orbital Routing Protocol | Go | 2 | DTN / Bundle Protocol (RFC 9171) store-and-forward mesh routing |
 | Antenna Control System | Rust | 3 | Deterministic tracking loop with a simulated dish backend |
-| RF Signal Processing Pipeline | SDR | 4 | Modem / error-correction chain (simulation-first) |
+| RF Signal Processing Pipeline | Rust | 4 | Modem / error-correction chain, CCSDS-style framing (simulation-first) |
 | Space-AI Bridge | Go | 5 | On-orbit inference API over the DTN routing layer |
 | TPT Ecosystem Integration | — | 6 | Handoff interfaces to Aether, DataCenter, Sentinel |
 
@@ -29,6 +29,7 @@ tpt-zenith/
 ├── go.mod                  # Go module (github.com/TPT-Solutions/tpt-zenith)
 ├── antenna-control/        # Rust crate (Phase 3)
 ├── orbital-mechanics/      # Rust crate (Phase 1)
+├── rf-pipeline/            # Rust crate (Phase 4)
 ├── routing/                # Go package (Phase 2)
 ├── space-ai-bridge/        # Go package (Phase 5)
 ├── LICENSE-MIT

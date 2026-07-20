@@ -46,18 +46,18 @@ Goal: route data through a simulated intermittent satellite mesh using contact s
 ## Phase 3 — Antenna Control System (Rust, simulated hardware)
 Goal: deterministic tracking loop against a simulated dish, ready for real hardware later.
 
-- [ ] Deterministic tracking loop (orbital mechanics output → pointing commands)
-- [ ] Hardware abstraction layer with a simulated dish backend
-- [ ] Sub-degree tracking accuracy tests against simulated satellite passes
-- [ ] Interface contract defined for future real microcontroller backend
+- [x] Deterministic tracking loop (orbital mechanics output → pointing commands)
+- [x] Hardware abstraction layer with a simulated dish backend
+- [x] Sub-degree tracking accuracy tests against simulated satellite passes
+- [x] Interface contract defined for future real microcontroller backend
 
 ## Phase 4 — RF Signal Processing Pipeline (SDR, simulation-first)
 Goal: define and simulate the modem/error-correction chain before touching real SDR hardware.
 
-- [ ] Modulation/demodulation + error correction interfaces
-- [ ] Software simulation of the signal chain (no real SDR required)
-- [ ] Spike/decision doc: GNU Radio integration vs custom Rust SDR stack
-- [ ] CCSDS standard compliance notes for framing/coding
+- [x] Modulation/demodulation + error correction interfaces — new `rf-pipeline` crate: `Modulator`/`Demodulator` traits (`Bpsk`, `Qpsk`, Gray-coded, unit-energy) and `Encoder`/`Decoder` traits (`Hamming74`, single-error-correcting), each independently testable and swappable
+- [x] Software simulation of the signal chain (no real SDR required) — `AwgnChannel` (hand-rolled PRNG + Box-Muller, no `rand` dependency, matching the workspace's zero-dependency convention) plus `simulate_link` wiring encode → modulate → channel → demodulate → decode end to end; tested for lossless round-trip at zero noise and, statistically, that FEC lowers bit-error-rate under noise vs. the uncoded path
+- [x] Spike/decision doc: GNU Radio integration vs custom Rust SDR stack — `rf-pipeline/docs/gnu-radio-vs-rust-decision.md`; decided custom Rust for Phase 4 (simulation-first, consistent with the rest of the workspace's zero-dependency style), revisit at Phase 7 hardware integration
+- [x] CCSDS standard compliance notes for framing/coding — `rf-pipeline/docs/ccsds-compliance.md`; also implemented the CCSDS 133.0-B-2 Space Packet primary header itself (`frame.rs`: `SpacePacketHeader`/`SpacePacket`, bit-exact field widths, round-tripped and range-validated in tests) as something concrete for the compliance notes to reference, with an explicit gap list (Reed-Solomon/convolutional coding, Transfer Frames, randomization, secondary header formats) for anyone continuing toward a standards-track claim
 
 ## Phase 5 — Space-AI Bridge (on-orbit inference API)
 Goal: demonstrate on-orbit inference and bandwidth savings, over the routing layer, in simulation.

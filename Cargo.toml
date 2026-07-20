@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "antenna-control",
     "orbital-mechanics",
+    "rf-pipeline",
 ]
 
 [workspace.package]
