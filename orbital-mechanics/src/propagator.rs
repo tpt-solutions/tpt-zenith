@@ -21,6 +21,21 @@ mod init;
 mod propagate;
 mod time;
 
+use crate::constants::J3OJ2;
+
+/// Shared `xlcof`/`aycof` formula, evaluated once by `init` against the
+/// near-earth inclination (`sinio`/`cosio`) and again by `propagate` against
+/// the deep-space perturbed inclination (`sinip`/`cosip`) after `dpper`.
+fn xlcof_aycof(sini: f64, cosi: f64) -> (f64, f64) {
+    let xlcof = if (cosi + 1.0).abs() > 1.5e-12 {
+        -0.25 * J3OJ2 * sini * (3.0 + 5.0 * cosi) / (1.0 + cosi)
+    } else {
+        -0.25 * J3OJ2 * sini * (3.0 + 5.0 * cosi) / 1.5e-12
+    };
+    let aycof = -0.5 * J3OJ2 * sini;
+    (xlcof, aycof)
+}
+
 /// Position (km) and velocity (km/s) in the TEME inertial frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StateVector {

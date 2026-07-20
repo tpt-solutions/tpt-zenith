@@ -5,7 +5,7 @@
 //! `sgp4`: propagating an initialized [`Propagator`](super::Propagator) forward in time.
 
 use super::{Propagator, StateVector, TWOPId, X2O3};
-use crate::constants::{EARTH_RADIUS_KM, J2, J3OJ2, XKE};
+use crate::constants::{EARTH_RADIUS_KM, J2, XKE};
 use crate::error::{OrbitError, Result};
 
 impl Propagator {
@@ -96,12 +96,7 @@ impl Propagator {
             }
             sinip = xincp.sin();
             cosip = xincp.cos();
-            p.aycof = -0.5 * J3OJ2 * sinip;
-            if (cosip + 1.0).abs() > 1.5e-12 {
-                p.xlcof = -0.25 * J3OJ2 * sinip * (3.0 + 5.0 * cosip) / (1.0 + cosip);
-            } else {
-                p.xlcof = -0.25 * J3OJ2 * sinip * (3.0 + 5.0 * cosip) / 1.5e-12;
-            }
+            (p.xlcof, p.aycof) = super::xlcof_aycof(sinip, cosip);
         }
         let axnl = ep * argpp.cos();
         let temp = 1.0 / (am * (1.0 - ep * ep));

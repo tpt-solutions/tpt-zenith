@@ -203,12 +203,7 @@ impl Propagator {
             }
             p.nodecf = 3.5 * omeosq * xhdot1 * p.cc1;
             p.t2cof = 1.5 * p.cc1;
-            if (cosio + 1.0).abs() > 1.5e-12 {
-                p.xlcof = -0.25 * J3OJ2 * sinio * (3.0 + 5.0 * cosio) / (1.0 + cosio);
-            } else {
-                p.xlcof = -0.25 * J3OJ2 * sinio * (3.0 + 5.0 * cosio) / 1.5e-12;
-            }
-            p.aycof = -0.5 * J3OJ2 * sinio;
+            (p.xlcof, p.aycof) = super::xlcof_aycof(sinio, cosio);
             p.delmo = (1.0 + p.eta * p.mo.cos()).powi(3);
             p.sinmao = p.mo.sin();
             p.x7thm1 = 7.0 * cosio2 - 1.0;
