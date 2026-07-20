@@ -18,7 +18,7 @@ Goal: scaffold the monorepo, licensing, and CI so later phases have somewhere to
 ## Phase 1 — Orbital Mechanics Engine (Rust, simulation-only)
 Goal: predict satellite positions and visibility windows without any live data feed.
 
-- [ ] Custom SGP4/SDP4 propagator crate (TLE parsing, position/velocity at epoch)
+- [x] Custom SGP4/SDP4 propagator crate (TLE parsing, position/velocity at epoch)
   - [x] Near-Earth SGP4 path (accurate to reference `tcppver.out` vectors)
   - [x] Fix `dsinit`: irez==1 (24h resonance) `del1`/`del2`/`del3` were stored into the wrong struct fields (`d2201`/`d2211`, and `del3` was dropped entirely) instead of the dedicated `del1`/`del2`/`del3` fields
   - [x] Fix `dspace`: the simple-vs-full resonance formula branch was gated on `irez != 1` instead of `irez != 2` — 24h- and 12h-resonance satellites were swapped onto each other's formulas
@@ -28,11 +28,11 @@ Goal: predict satellite positions and visibility windows without any live data f
   - [x] Investigate satellite 22312 (near-Earth, `isimp==1` high-drag path) — was almost entirely the `no` bug above (55 km → 0.58 km residual); the small remainder is consistent with float sensitivity at this TLE's extreme inputs (perigee ~79 km, B* ~0.5) and is documented in the excluded list, not further diagnosed
   - [x] Investigate satellite 23333 (e≈0.973, very low mean motion) — fully resolved by the `no` fix above; now passes the strict cm tolerance
   - [x] Fix `.gitignore`: the fixture file `tests/fixtures/sgp4/tcppver.out` was caught by the blanket `*.out` rule, so `tests/verification.rs` never actually compiled/ran in CI; added a negation and committed the fixture
-  - [ ] Clean up ~40 pre-existing `cargo clippy` warnings in `propagator/deep_space.rs` and `bin/crosscheck.rs` (unnecessary `mut`, unused vars, non-upper-case const) — CI's `-D warnings` clippy step was already failing before this session's changes, unrelated to the propagator bug fix
-- [ ] Visibility window calculation (look angles, AOS/LOS for a ground station)
-- [ ] Handoff optimization logic (select next satellite as current one sets)
-- [ ] Unit tests against known TLE/SGP4 reference vectors
-- [ ] Simulated constellation generator (synthetic Starlink/OneWeb-like TLE sets)
+  - [x] Clean up ~40 pre-existing `cargo clippy` warnings in `propagator/deep_space.rs`, `tle.rs`, and `bin/crosscheck.rs` (unnecessary `mut`, unused vars, non-upper-case `TWOPId` → `TWO_PI`, dead constants, a vestigial no-op `if`/`dndt` in `dsinit`/`dspace`); `cargo clippy --all-targets -- -D warnings` is now clean, matching what CI enforces
+- [x] Visibility window calculation (look angles, AOS/LOS for a ground station) — already implemented (`visibility.rs`: `GroundStation`, `look_angles`, `visibility_windows`) with passing tests; fixed a real bug found while reviewing it: `gmst_at` computed Greenwich Mean Sidereal Time as if `tsince=0` were the J2000 epoch, ignoring the propagator's actual TLE epoch, which would put every look-angle/AOS/LOS calculation off by a essentially-arbitrary rotation for any TLE not epoched at J2000. Replaced it with `Propagator::gmst_rad(tsince)`, built from `gsto` (GST at the TLE's own epoch, already computed by `sgp4init` for the deep-space terms but previously unexposed) plus the same Earth-rotation rate `dspace` uses
+- [x] Handoff optimization logic (select next satellite as current one sets) — already implemented (`handoff.rs`: `plan_handoffs`) with a passing empty-case test; tightened it to rank candidates by their actual look-angle elevation at the exact LOS instant (via the new `gmst_rad`) instead of a candidate window's peak elevation as a stand-in, and added a test exercising a real 24-satellite Walker constellation over 24h to confirm handoffs are actually found and always land on a different, currently-visible satellite
+- [x] Unit tests against known TLE/SGP4 reference vectors — covered by `tests/verification.rs` against the official 33-satellite Vallado `tcppver.out` suite (see above)
+- [x] Simulated constellation generator (synthetic Starlink/OneWeb-like TLE sets) — already implemented (`constellation.rs`: `ConstellationSpec`/`generate`) with passing tests for count and altitude-derived mean motion
 
 ## Phase 2 — Orbital Routing Protocol (Go, DTN7/Bundle Protocol RFC 9171)
 Goal: route data through a simulated intermittent satellite mesh using contact schedules from Phase 1.

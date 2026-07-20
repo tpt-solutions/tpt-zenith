@@ -118,7 +118,7 @@ impl Tle {
                 _ => {}
             }
         }
-        let expected = (line.as_bytes()[68] - b'0') as u8;
+        let expected = line.as_bytes()[68] - b'0';
         let computed = (sum % 10) as u8;
         if computed != expected {
             Err(OrbitError::ChecksumMismatch(computed, expected))
@@ -217,8 +217,6 @@ impl Tle {
 
     /// Epoch as a modified Julian date (MJD, days since 1858-11-17).
     pub fn epoch_mjd(&self) -> f64 {
-        let a = if self.epoch_year < 1900 { 0 } else { 0 };
-        let _ = a;
         // Fractional day -> MJD via day-of-year.
         // MJD at start of year = 365.25*(year-1858)-0.5 approx; use precise formula.
         let mjd_year_start = mjd_at_year_start(self.epoch_year);
@@ -227,7 +225,7 @@ impl Tle {
 }
 
 fn is_leap(y: u32) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }
 
 /// Modified Julian Date at the start (Jan 0.0 / Dec 31 of prior year) of `year`.
@@ -275,7 +273,7 @@ mod tests {
     fn rejects_bad_checksum() {
         let mut lines: Vec<&str> = ISS.lines().collect();
         // Corrupt the last checksum digit.
-        let bad = lines[2].clone();
+        let bad = lines[2];
         let mut chars: Vec<u8> = bad.bytes().collect();
         chars[68] = if chars[68] == b'0' { b'9' } else { b'0' };
         lines[2] = std::str::from_utf8(&chars).unwrap();

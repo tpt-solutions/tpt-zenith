@@ -59,11 +59,11 @@ impl StateVector {
     }
 }
 
-const TWOPId: f64 = 2.0 * std::f64::consts::PI;
+const TWO_PI: f64 = 2.0 * std::f64::consts::PI;
 const X2O3: f64 = 2.0 / 3.0;
 /// Earth rotation rate for Greenwich-angle propagation, rad/min (matches the
 /// `rptim` constant used by the reference `dspace` Greenwich-angle update).
-const EARTH_ROTATION_RAD_PER_MIN: f64 = 4.37526908801129966e-3;
+const EARTH_ROTATION_RAD_PER_MIN: f64 = 4.375_269_088_011_3e-3;
 
 /// Initialized element set for repeated SGP4/SDP4 propagation.
 ///
@@ -174,6 +174,6 @@ impl Propagator {
     ///
     /// [`propagate`]: Propagator::propagate
     pub fn gmst_rad(&self, tsince_min: f64) -> f64 {
-        (self.gsto + tsince_min * EARTH_ROTATION_RAD_PER_MIN).rem_euclid(TWOPId)
+        (self.gsto + tsince_min * EARTH_ROTATION_RAD_PER_MIN).rem_euclid(TWO_PI)
     }
 }

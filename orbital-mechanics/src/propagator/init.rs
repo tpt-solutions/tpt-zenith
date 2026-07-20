@@ -5,7 +5,7 @@
 //! `sgp4init`: building a [`Propagator`](super::Propagator) from a parsed TLE.
 
 use super::time::{epoch_days_1950, gstime};
-use super::{Propagator, TWOPId, X2O3};
+use super::{Propagator, TWO_PI, X2O3};
 use crate::constants::{EARTH_RADIUS_KM, J2, J3OJ2, J4, XKE};
 use crate::error::Result;
 use crate::tle::Tle;
@@ -14,7 +14,7 @@ impl Propagator {
     /// Build a propagator from a parsed TLE (equivalent to `sgp4init`).
     pub fn from_tle(tle: &Tle) -> Result<Self> {
         // `no` in rad/min via the TLE mean motion (rev/day).
-        let xpdotp = 1440.0 / TWOPId;
+        let xpdotp = 1440.0 / TWO_PI;
         let no = tle.mean_motion / xpdotp;
         let mut p = Propagator {
             isimp: 0,
@@ -110,7 +110,7 @@ impl Propagator {
 
         // --- initl ---
         let epoch = epoch_days_1950(tle.epoch_mjd());
-        let (ao, con42, cosio, cosio2, eccsq, omeosq, _posq, rp, rteosq, sinio, gsto) = {
+        let (ao, con42, cosio, cosio2, _eccsq, omeosq, _posq, rp, rteosq, sinio, gsto) = {
             let ecco = p.ecco;
             let inclo = p.inclo;
             let eccsq = ecco * ecco;
@@ -227,7 +227,7 @@ impl Propagator {
             p.x7thm1 = 7.0 * cosio2 - 1.0;
 
             // --- deep space initialization ---
-            if (TWOPId / no) >= 225.0 {
+            if (TWO_PI / no) >= 225.0 {
                 p.method = 'd';
                 p.isimp = 1;
                 let con41 = p.con41;

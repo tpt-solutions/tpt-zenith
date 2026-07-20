@@ -4,7 +4,7 @@
 
 //! Pure time/sidereal-time helpers shared by `init` and `deep_space`.
 
-use super::TWOPId;
+use super::TWO_PI;
 
 /// Greenwich Mean Sidereal Time (radians) at a Julian date (UT1 days).
 pub(super) fn gstime(jdut1: f64) -> f64 {
@@ -14,9 +14,9 @@ pub(super) fn gstime(jdut1: f64) -> f64 {
         + 0.093104 * tut1 * tut1
         + (876600.0 * 3600.0 + 8640184.812866) * tut1
         + 67310.54841;
-    temp = (temp * deg2rad / 240.0) % TWOPId;
+    temp = (temp * deg2rad / 240.0) % TWO_PI;
     if temp < 0.0 {
-        temp += TWOPId;
+        temp += TWO_PI;
     }
     temp
 }

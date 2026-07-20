@@ -4,7 +4,7 @@
 
 //! Deep space: dscom + dsinit + dpper + dspace.
 
-use super::{Propagator, TWOPId, X2O3};
+use super::{Propagator, TWO_PI, X2O3};
 use crate::constants::XKE;
 
 /// Lunar/solar long-period periodic sums used by both the `dsinit` baseline
@@ -94,7 +94,7 @@ impl Propagator {
         let em = self.ecco;
         let emsq = em * em;
         let argpp = self.argpo;
-        let mut inclp = self.inclo;
+        let inclp = self.inclo;
         let nodep = self.nodeo;
         let nm = no;
 
@@ -108,7 +108,7 @@ impl Propagator {
         let _betasq = 1.0 - emsq_;
 
         let day = epoch + 18261.5;
-        let xnodce = (4.5236020 - 9.2422029e-4 * day) % TWOPId;
+        let xnodce = (4.5236020 - 9.2422029e-4 * day) % TWO_PI;
         let stem = xnodce.sin();
         let ctem = xnodce.cos();
         let zcosil = 0.91375164 - 0.03568096 * ctem;
@@ -144,12 +144,12 @@ impl Propagator {
         let mut z21 = 0.0;
         let mut z22 = 0.0;
         let mut z23 = 0.0;
-        let mut z11_ = 0.0;
-        let mut z13_ = 0.0;
-        let mut z21_ = 0.0;
-        let mut z23_ = 0.0;
-        let mut z31_ = 0.0;
-        let mut z33_ = 0.0;
+        let z11_ = 0.0;
+        let z13_ = 0.0;
+        let z21_ = 0.0;
+        let z23_ = 0.0;
+        let z31_ = 0.0;
+        let z33_ = 0.0;
         let mut s1 = 0.0;
         let mut s2 = 0.0;
         let mut s3 = 0.0;
@@ -176,16 +176,16 @@ impl Propagator {
         let mut sz31 = 0.0;
         let mut sz32 = 0.0;
         let mut sz33 = 0.0;
-        let mut xgh2 = 0.0;
-        let mut xgh3 = 0.0;
-        let mut xgh4 = 0.0;
-        let mut xh2 = 0.0;
-        let mut xh3 = 0.0;
-        let mut xi2 = 0.0;
-        let mut xi3 = 0.0;
-        let mut xl2 = 0.0;
-        let mut xl3 = 0.0;
-        let mut xl4 = 0.0;
+        let _xgh2 = 0.0;
+        let _xgh3 = 0.0;
+        let _xgh4 = 0.0;
+        let _xh2 = 0.0;
+        let _xh3 = 0.0;
+        let _xi2 = 0.0;
+        let _xi3 = 0.0;
+        let _xl2 = 0.0;
+        let _xl3 = 0.0;
+        let _xl4 = 0.0;
 
         for lsflg in 1..=2 {
             let a1 = zcosg * zcosh + zsing * zcosi * zsinh;
@@ -261,8 +261,8 @@ impl Propagator {
             }
         }
 
-        let zmol = (4.7199672 + 0.22997150 * day - gam) % TWOPId;
-        let zmos = (6.2565837 + 0.017201977 * day) % TWOPId;
+        let zmol = (4.7199672 + 0.22997150 * day - gam) % TWO_PI;
+        let zmos = (6.2565837 + 0.017201977 * day) % TWO_PI;
 
         // solar terms
         let se2 = 2.0 * ss1 * ss6;
@@ -311,19 +311,19 @@ impl Propagator {
         if (nm < 0.0052359877) && (nm > 0.0034906585) {
             irez = 1;
         }
-        if (nm >= 8.26e-3) && (nm <= 9.24e-3) && (em >= 0.5) {
+        if (8.26e-3..=9.24e-3).contains(&nm) && (em >= 0.5) {
             irez = 2;
         }
-        let mut ses = ss1 * zns * ss5;
-        let mut sis = ss2 * zns * (sz11 + sz13);
+        let ses = ss1 * zns * ss5;
+        let sis = ss2 * zns * (sz11 + sz13);
         let sls = -zns * ss3 * (sz1 + sz3 - 14.0 - 6.0 * emsq);
         let sghs = ss4 * zns * (sz31 + sz33 - 6.0);
         let mut shs = -zns * ss2 * (sz21 + sz23);
-        if (inclp < 5.2359877e-2) || (inclp > std::f64::consts::PI - 5.2359877e-2) {
+        if !(5.2359877e-2..=std::f64::consts::PI - 5.2359877e-2).contains(&inclp) {
             shs = 0.0;
         }
         if sinim != 0.0 {
-            shs = shs / sinim;
+            shs /= sinim;
         }
         let sgs = sghs - cosim * shs;
         let dedt = ses + s1 * znl * s5;
@@ -331,35 +331,25 @@ impl Propagator {
         let dmdt = sls - znl * s3 * (z1 + z3 - 14.0 - 6.0 * emsq);
         let sghl = s4 * znl * (z31 + z33 - 6.0);
         let mut shll = -znl * s2 * (z21 + z23);
-        if (inclp < 5.2359877e-2) || (inclp > std::f64::consts::PI - 5.2359877e-2) {
+        if !(5.2359877e-2..=std::f64::consts::PI - 5.2359877e-2).contains(&inclp) {
             shll = 0.0;
         }
         let mut domdt = sgs + sghl;
         let mut dnodt = shs;
         if sinim != 0.0 {
-            domdt = domdt - cosim / sinim * shll;
-            dnodt = dnodt + shll / sinim;
+            domdt -= cosim / sinim * shll;
+            dnodt += shll / sinim;
         }
-        let theta = (self.gsto + 0.0 * 4.37526908801129966e-3) % TWOPId;
+        let theta = (self.gsto + 0.0 * 4.375_269_088_011_3e-3) % TWO_PI;
 
         if irez != 0 {
             let aonv = (nm / XKE).powf(X2O3);
             if irez == 2 {
                 let cosisq = cosim * cosim;
-                let mut emsq_ = em * em;
+                let emsq_ = em * em;
                 let eoc = em * emsq_;
                 let g201 = -0.306 - (em - 0.64) * 0.440;
-                let (
-                    mut g211,
-                    mut g310,
-                    mut g322,
-                    mut g410,
-                    mut g422,
-                    mut g520,
-                    mut g533,
-                    mut g521,
-                    mut g532,
-                );
+                let (g211, g310, g322, g410, g422, g520, g533, g521, g532);
                 if em <= 0.65 {
                     g211 = 3.616 - 13.2470 * em + 16.2900 * emsq_;
                     g310 = -19.302 + 117.3900 * em - 228.4190 * emsq_ + 156.5910 * eoc;
@@ -411,27 +401,27 @@ impl Propagator {
                 let xno2 = nm * nm;
                 let ainv2 = aonv * aonv;
                 let mut temp1 = 3.0 * xno2 * ainv2;
-                let mut temp = temp1 * 7.3636953e-9_f64.sqrt();
+                let temp = temp1 * 7.3636953e-9_f64.sqrt();
                 let d2201 = temp * f220 * g201;
                 let d2211 = temp * f221 * g211;
-                temp1 = temp1 * aonv;
+                temp1 *= aonv;
                 let temp = temp1 * 3.7393792e-7_f64.sqrt();
                 let d3210 = temp * f321 * g310;
                 let d3222 = temp * f322 * g322;
-                temp1 = temp1 * aonv;
+                temp1 *= aonv;
                 let temp = 2.0 * temp1 * 7.3636953e-9_f64.sqrt();
                 let d4410 = temp * f441 * g410;
                 let d4422 = temp * f442 * g422;
-                temp1 = temp1 * aonv;
+                temp1 *= aonv;
                 let temp = temp1 * 1.1428639e-7_f64.sqrt();
                 let d5220 = temp * f522 * g520;
                 let d5232 = temp * f523 * g532;
                 let temp = 2.0 * temp1 * 2.1765803e-9_f64.sqrt();
                 let d5421 = temp * f542 * g521;
                 let d5433 = temp * f543 * g533;
-                let xlamo = (self.mo + self.nodeo + self.nodeo - theta - theta) % TWOPId;
+                let xlamo = (self.mo + self.nodeo + self.nodeo - theta - theta) % TWO_PI;
                 let xfact =
-                    self.mdot + dmdt + 2.0 * (self.nodedot + dnodt - 4.37526908801129966e-3) - no;
+                    self.mdot + dmdt + 2.0 * (self.nodedot + dnodt - 4.375_269_088_011_3e-3) - no;
                 self.d2201 = d2201;
                 self.d2211 = d2211;
                 self.d3210 = d3210;
@@ -453,12 +443,12 @@ impl Propagator {
                 let f311 = 0.9375 * sinim * sinim * (1.0 + 3.0 * cosim) - 0.75 * (1.0 + cosim);
                 let f330 = 1.0 + cosim;
                 let f330 = 1.875 * f330 * f330 * f330;
-                let mut del1 = 3.0 * nm * nm * aonv * aonv;
+                let del1 = 3.0 * nm * nm * aonv * aonv;
                 let del2 = 2.0 * del1 * f220 * g200 * 1.7891679e-6;
                 let del3 = 3.0 * del1 * f330 * g300 * 2.2123015e-7 * aonv;
                 let del1 = del1 * f311 * g310 * 2.1460748e-6 * aonv;
-                let xlamo = (self.mo + self.nodeo + self.argpo - theta) % TWOPId;
-                let xfact = self.mdot + xpidot - 4.37526908801129966e-3 + dmdt + domdt + dnodt - no;
+                let xlamo = (self.mo + self.nodeo + self.argpo - theta) % TWO_PI;
+                let xfact = self.mdot + xpidot - 4.375_269_088_011_3e-3 + dmdt + domdt + dnodt - no;
                 self.del1 = del1;
                 self.del2 = del2;
                 self.del3 = del3;
@@ -532,22 +522,22 @@ impl Propagator {
         let mut ph = ph_raw;
 
         // init == 'n'
-        pe = pe - self.peo;
-        pinc = pinc - self.pinco;
-        pl = pl - self.plo;
-        pgh = pgh - self.pgho;
-        ph = ph - self.pho;
-        *inclp = *inclp + pinc;
-        *ep = *ep + pe;
+        pe -= self.peo;
+        pinc -= self.pinco;
+        pl -= self.plo;
+        pgh -= self.pgho;
+        ph -= self.pho;
+        *inclp += pinc;
+        *ep += pe;
         let sinip = (*inclp).sin();
         let cosip = (*inclp).cos();
 
         if *inclp >= 0.2 {
-            ph = ph / sinip;
-            pgh = pgh - cosip * ph;
-            *argpp = *argpp + pgh;
-            *nodep = *nodep + ph;
-            *mp = *mp + pl;
+            ph /= sinip;
+            pgh -= cosip * ph;
+            *argpp += pgh;
+            *nodep += ph;
+            *mp += pl;
         } else {
             let sinop = (*nodep).sin();
             let cosop = (*nodep).cos();
@@ -555,17 +545,17 @@ impl Propagator {
             let mut betdp = sinip * cosop;
             let dalf = ph * cosop + pinc * cosip * sinop;
             let dbet = -ph * sinop + pinc * cosip * cosop;
-            alfdp = alfdp + dalf;
-            betdp = betdp + dbet;
-            *nodep = (*nodep).rem_euclid(TWOPId);
+            alfdp += dalf;
+            betdp += dbet;
+            *nodep = (*nodep).rem_euclid(TWO_PI);
             let xnoh = *nodep;
             *nodep = alfdp.atan2(betdp);
-            if (*nodep < xnoh) {
-                *nodep = *nodep + TWOPId;
+            if *nodep < xnoh {
+                *nodep += TWO_PI;
             } else {
-                *nodep = *nodep - TWOPId;
+                *nodep -= TWO_PI;
             }
-            *mp = *mp + pl;
+            *mp += pl;
             *argpp = (*mp + *argpp + cosip * xnoh) - *mp - cosip * *nodep;
         }
     }
@@ -589,18 +579,17 @@ impl Propagator {
         let g44 = 1.8014998;
         let g52 = 1.0508330;
         let g54 = 4.4108898;
-        let rptim = 4.37526908801129966e-3;
+        let rptim = 4.375_269_088_011_3e-3;
         let stepp = 720.0;
         let stepn = -720.0;
         let step2 = 259200.0;
 
-        let mut dndt = 0.0;
-        let theta = (self.gsto + tc * rptim) % TWOPId;
-        *em = *em + self.dedt * tc;
-        *inclm = *inclm + self.didt * tc;
-        *argpm = *argpm + self.domdt * tc;
-        *nodem = *nodem + self.dnodt * tc;
-        *mm = *mm + self.dmdt * tc;
+        let theta = (self.gsto + tc * rptim) % TWO_PI;
+        *em += self.dedt * tc;
+        *inclm += self.didt * tc;
+        *argpm += self.domdt * tc;
+        *nodem += self.dnodt * tc;
+        *mm += self.dmdt * tc;
 
         let mut ft = 0.0;
         if self.irez != 0 {
@@ -626,7 +615,7 @@ impl Propagator {
                     xnddt = self.del1 * (xli - fasx2).cos()
                         + 2.0 * self.del2 * (2.0 * (xli - fasx4)).cos()
                         + 3.0 * self.del3 * (3.0 * (xli - fasx6)).cos();
-                    xnddt = xnddt * xldot;
+                    xnddt *= xldot;
                 } else {
                     let xomi = self.argpo + self.argpdot * atime;
                     let x2omi = xomi + xomi;
@@ -653,7 +642,7 @@ impl Propagator {
                                 + self.d4422 * (x2li - g44).cos()
                                 + self.d5421 * (xomi + x2li - g54).cos()
                                 + self.d5433 * (-xomi + x2li - g54).cos());
-                    xnddt = xnddt * xldot;
+                    xnddt *= xldot;
                 }
 
                 if (tc - atime).abs() >= stepp {
@@ -665,7 +654,7 @@ impl Propagator {
                 if iretn == 381 {
                     xli = xli + xldot * delt + xndt * step2;
                     xni = xni + xndt * delt + xnddt * step2;
-                    atime = atime + delt;
+                    atime += delt;
                 }
             }
             self.xli = xli;
@@ -676,12 +665,10 @@ impl Propagator {
             let xl = xli + xldot * ft + xndt * ft * ft * 0.5;
             if self.irez != 1 {
                 *mm = xl - 2.0 * *nodem + 2.0 * theta;
-                dndt = nm_local - self.no_kozai;
             } else {
                 *mm = xl - *nodem - *argpm + theta;
-                dndt = nm_local - self.no_kozai;
             }
-            *nm = self.no_kozai + dndt;
+            *nm = nm_local;
         }
     }
 }

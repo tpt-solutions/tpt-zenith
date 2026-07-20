@@ -12,7 +12,6 @@ const XJ2: f64 = 1.082616e-3;
 const XJ3: f64 = -2.53881e-6;
 const XJ4: f64 = -1.65597e-6;
 const XKMPER: f64 = 6378.137;
-const MU: f64 = 398600.79964;
 const XKE: f64 = 7.43668811206102e-02;
 const CK2: f64 = 0.5 * XJ2 * AE * AE;
 const CK4: f64 = -0.375 * XJ4 * AE * AE * AE * AE;
@@ -21,7 +20,6 @@ const S0: f64 = 78.0;
 const QOMS2T: f64 =
     ((Q0 - S0) / XKMPER) * ((Q0 - S0) / XKMPER) * ((Q0 - S0) / XKMPER) * ((Q0 - S0) / XKMPER);
 const A3OVK2: f64 = -XJ3 / CK2 * AE * AE * AE;
-const TWOPId: f64 = 2.0 * std::f64::consts::PI;
 const X2O3: f64 = 2.0 / 3.0;
 const TWO_PI: f64 = 2.0 * std::f64::consts::PI;
 
@@ -226,7 +224,7 @@ fn propagate(s: &Sat, tsince: f64) -> [f64; 3] {
     let mut omega = omgadf;
     let mut xmp = xmdf;
     let tsq = tsince * tsince;
-    let mut xnode = xnoddf + s.xnodcf * tsq;
+    let xnode = xnoddf + s.xnodcf * tsq;
     let mut tempa = 1.0 - s.c1 * tsince;
     let mut tempe = s.bstar * s.c4 * tsince;
     let mut templ = s.t2cof * tsq;

@@ -49,7 +49,7 @@ impl Default for ConstellationSpec {
 impl ConstellationSpec {
     /// Generate the synthetic TLE set.
     pub fn generate(&self) -> Vec<Tle> {
-        let per_plane = (self.total + self.planes - 1) / self.planes;
+        let per_plane = self.total.div_ceil(self.planes);
         let mean_motion = if self.mean_motion > 0.0 {
             self.mean_motion
         } else {

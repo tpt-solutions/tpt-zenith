@@ -4,7 +4,7 @@
 
 //! `sgp4`: propagating an initialized [`Propagator`](super::Propagator) forward in time.
 
-use super::{Propagator, StateVector, TWOPId, X2O3};
+use super::{Propagator, StateVector, TWO_PI, X2O3};
 use crate::constants::{EARTH_RADIUS_KM, J2, XKE};
 use crate::error::{OrbitError, Result};
 
@@ -35,7 +35,7 @@ impl Propagator {
             let t3 = t2 * tsince;
             let t4 = t3 * tsince;
             tempa = tempa - p.d2 * t2 - p.d3 * t3 - p.d4 * t4;
-            tempe = tempe + p.bstar * p.cc5 * (mm.sin() - p.sinmao);
+            tempe += p.bstar * p.cc5 * (mm.sin() - p.sinmao);
             templ = templ + p.t3cof * t3 + t4 * (p.t4cof + tsince * p.t5cof);
         }
 
@@ -44,7 +44,7 @@ impl Propagator {
         let mut inclm = p.inclo;
 
         if p.method == 'd' {
-            let mut tc = tsince;
+            let tc = tsince;
             Self::dspace(
                 &mut p, tc, &mut em, &mut argpm, &mut inclm, &mut nodem, &mut nm, &mut mm,
             );
@@ -55,8 +55,8 @@ impl Propagator {
         }
         let am = (XKE / nm).powf(X2O3) * tempa * tempa;
         nm = XKE / am.powf(1.5);
-        em = em - tempe;
-        if em >= 1.0 || em < -0.001 {
+        em -= tempe;
+        if !(-0.001..1.0).contains(&em) {
             return Err(OrbitError::TimeOutOfRange(
                 "eccentricity out of range".into(),
             ));
@@ -64,15 +64,15 @@ impl Propagator {
         if em < 1.0e-6 {
             em = 1.0e-6;
         }
-        mm = mm + p.no_kozai * templ;
+        mm += p.no_kozai * templ;
         let mut xlm = mm + argpm + nodem;
         let emsq = em * em;
-        let temp = 1.0 - emsq;
+        let _temp = 1.0 - emsq;
 
-        nodem = nodem.rem_euclid(TWOPId);
-        argpm = argpm.rem_euclid(TWOPId);
-        xlm = xlm.rem_euclid(TWOPId);
-        mm = (xlm - argpm - nodem).rem_euclid(TWOPId);
+        nodem = nodem.rem_euclid(TWO_PI);
+        argpm = argpm.rem_euclid(TWO_PI);
+        xlm = xlm.rem_euclid(TWO_PI);
+        mm = (xlm - argpm - nodem).rem_euclid(TWO_PI);
 
         let sinim = inclm.sin();
         let cosim = inclm.cos();
@@ -87,12 +87,12 @@ impl Propagator {
         let mut cosip = cosim;
         if p.method == 'd' {
             Self::dpper(
-                &mut p, tsince, &mut ep, &mut xincp, &mut nodep, &mut argpp, &mut mp,
+                &p, tsince, &mut ep, &mut xincp, &mut nodep, &mut argpp, &mut mp,
             );
             if xincp < 0.0 {
                 xincp = -xincp;
-                nodep = nodep + std::f64::consts::PI;
-                argpp = argpp - std::f64::consts::PI;
+                nodep += std::f64::consts::PI;
+                argpp -= std::f64::consts::PI;
             }
             if ep < 1.0e-6 {
                 ep = 1.0e-6;
@@ -106,10 +106,10 @@ impl Propagator {
         let axnl = ep * argpp.cos();
         let temp = 1.0 / (am * (1.0 - ep * ep));
         let aynl = ep * argpp.sin() + temp * p.aycof;
-        let mut xl = mp + argpp + nodep + temp * p.xlcof * axnl;
+        let xl = mp + argpp + nodep + temp * p.xlcof * axnl;
 
         // solve Kepler's equation
-        let mut u = (xl - nodep).rem_euclid(TWOPId);
+        let u = (xl - nodep).rem_euclid(TWO_PI);
         let mut eo1 = u;
         let mut tem5: f64 = 9999.9;
         let mut ktr = 1;
@@ -121,7 +121,7 @@ impl Propagator {
             if tem5.abs() >= 0.95 {
                 tem5 = if tem5 > 0.0 { 0.95 } else { -0.95 };
             }
-            eo1 = eo1 + tem5;
+            eo1 += tem5;
             ktr += 1;
         }
 

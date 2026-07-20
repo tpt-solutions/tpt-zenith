@@ -62,7 +62,7 @@ pub fn plan_handoffs(
                     continue;
                 };
                 let elev = look_angles(station, &state, satellites[to].gmst_rad(los)).elevation_deg;
-                if best.map_or(true, |b| elev > b.1) {
+                if best.is_none_or(|b| elev > b.1) {
                     best = Some((to, elev));
                 }
             }
@@ -83,7 +83,6 @@ pub fn plan_handoffs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tle::Tle;
     use crate::visibility::GroundStation;
 
     #[test]
