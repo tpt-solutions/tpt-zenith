@@ -19,6 +19,13 @@ Goal: scaffold the monorepo, licensing, and CI so later phases have somewhere to
 Goal: predict satellite positions and visibility windows without any live data feed.
 
 - [ ] Custom SGP4/SDP4 propagator crate (TLE parsing, position/velocity at epoch)
+  - [x] Near-Earth SGP4 path (accurate to reference `tcppver.out` vectors)
+  - [x] Fix `dsinit`: irez==1 (24h resonance) `del1`/`del2`/`del3` were stored into the wrong struct fields (`d2201`/`d2211`, and `del3` was dropped entirely) instead of the dedicated `del1`/`del2`/`del3` fields
+  - [x] Fix `dspace`: the simple-vs-full resonance formula branch was gated on `irez != 1` instead of `irez != 2` — 24h- and 12h-resonance satellites were swapped onto each other's formulas
+  - [x] Remove dead/incorrect scaffold code in `dsinit` (unused `em_`/`inclm_`/`argpm_`/`nodem_`/`mm_` locals) and debug scaffolding (`ZENITH_DEBUG` eprintln, `examples/reference_check.rs`)
+  - [ ] Re-verify full 33-satellite `tests/verification.rs` suite against the corrected `dspace`/`dsinit` and shrink the `excluded` list to only genuine remaining edge cases
+  - [ ] Investigate satellite 22312 (near-Earth, `isimp==1` high-drag path) — separate bug, unrelated to the deep-space fixes above
+  - [ ] Investigate satellite 23333 (e≈0.973, very low mean motion) — large residual even after the resonance-branch fix; needs its own diagnosis
 - [ ] Visibility window calculation (look angles, AOS/LOS for a ground station)
 - [ ] Handoff optimization logic (select next satellite as current one sets)
 - [ ] Unit tests against known TLE/SGP4 reference vectors

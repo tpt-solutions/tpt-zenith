@@ -8,10 +8,14 @@
 //! visibility window calculation, and handoff optimization. This crate is
 //! software-only simulation; no live data feeds are required.
 
-pub mod constellation;
-pub mod handoff;
+pub mod constants;
+pub mod error;
 pub mod propagator;
+pub mod tle;
 pub mod visibility;
+pub mod handoff;
+pub mod constellation;
 
 /// Re-exports of the most commonly used items.
-pub use crate::propagator::{StateVector, Tle};
+pub use crate::propagator::{Propagator, StateVector};
+pub use crate::tle::Tle;

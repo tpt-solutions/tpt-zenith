@@ -60,12 +60,16 @@ impl Tle {
 
     /// Parse from explicit line 1 and line 2 (and optional name).
     pub fn parse_lines(name: Option<String>, line1: &str, line2: &str) -> Result<Self> {
-        if line1.len() != 69 {
+        // Standard TLE lines are 69 chars, but verification TLEs append extra
+        // start/stop/step fields. We accept >= 69 and use the first 69 chars.
+        if line1.len() < 69 {
             return Err(OrbitError::InvalidLineLength(line1.len()));
         }
-        if line2.len() != 69 {
+        if line2.len() < 69 {
             return Err(OrbitError::InvalidLineLength(line2.len()));
         }
+        let line1 = &line1[..69];
+        let line2 = &line2[..69];
         Tle::check_checksum(line1)?;
         Tle::check_checksum(line2)?;
 
@@ -146,14 +150,30 @@ impl Tle {
         Ok(v * 1e-7)
     }
 
-    /// Parse a decimal field that uses Fortran-style exponent notation,
-    /// e.g. "-12345-6" meaning -12345e-6.
+    /// Parse an exponential TLE field. TLE columns for `mean_motion_ddot` and
+    /// `bstar` omit the leading `0.`: e.g. " 12345-6" means 0.12345e-6 and
+    /// " 00000-0" means 0.0. We insert the implicit decimal point before
+    /// parsing.
     fn parse_exp_field(s: &str, field: &'static str) -> Result<f64> {
         let s = s.trim();
-        if s.is_empty() {
+        if s.is_empty() || s.chars().all(|c| c == '0' || c == ' ' || c == '-' || c == '+') {
             return Ok(0.0);
         }
-        let v: f64 = s
+        let sign = if s.starts_with('-') { "-" } else { "" };
+        let digits = s.trim_start_matches(['+', '-']).trim();
+        // Find the exponent marker '+' or '-' that begins the exponent part
+        // (the last sign in the string, introduced by e.g. "-6").
+        let exp_idx = digits.rfind(['+', '-']);
+        let (mantissa, exp) = match exp_idx {
+            Some(i) => {
+                let m = &digits[..i];
+                let e = &digits[i..];
+                (m, e)
+            }
+            None => (digits, ""),
+        };
+        let combined = format!("{sign}0.{mantissa}e{exp}");
+        let v: f64 = combined
             .parse()
             .map_err(|_| OrbitError::ParseField { field, value: s.to_string() })?;
         Ok(v)
@@ -185,7 +205,6 @@ impl Tle {
 
     /// Epoch as a modified Julian date (MJD, days since 1858-11-17).
     pub fn epoch_mjd(&self) -> f64 {
-        let year = self.epoch_year as f64;
         let a = if self.epoch_year < 1900 { 0 } else { 0 };
         let _ = a;
         // Fractional day -> MJD via day-of-year.
@@ -224,8 +243,8 @@ mod tests {
     use super::*;
 
     const ISS: &str = "ISS (ZARYA)\n\
-1 25544U 98067A   24015.50000000  .00016717  00000-0  10270-3 0  9005\n\
-2 25544  51.6400 208.9163 0007652 360.0000 130.3994 15.49815308 90000";
+1 25544U 98067A   24015.50000000  .00016717  00000-0  10270-3 0  9004\n\
+2 25544  51.6400 208.9163 0007652 360.0000 130.3994 15.49815308 90008";
 
     #[test]
     fn parses_iss_fields() {

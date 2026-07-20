@@ -4,12 +4,13 @@
 
 //! SGP4 / SDP4 orbital propagator.
 //!
-//! Implements the standard NORAD SGP4 near-Earth model and the SDP4 deep-space
-//! model (Brouwer-Lyddane mean element theory with lunar/solar perturbations),
-//! following the Vallado reference implementation. Outputs position and
-//! velocity in the True Equator Mean Equinox (TEME) frame.
+//! A faithful port of the Vallado et al. "Revisiting Spacetrack Report #3"
+//! (AIAA 2006-6753) reference implementation. Outputs position and velocity in
+//! the True Equator Mean Equinox (TEME) frame, in kilometers and kilometers per
+//! second, using the WGS72 gravity constants. Validated against the official
+//! `tcppver.out` verification vectors (see `tests/verification.rs`).
 
-use crate::constants::*;
+use crate::constants::{EARTH_RADIUS_KM, J2, J3, J4, J3OJ2, MU_EARTH, XKE};
 use crate::error::{OrbitError, Result};
 use crate::tle::Tle;
 
@@ -36,106 +37,75 @@ impl StateVector {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum OrbitClassification {
-    /// Near-Earth, period < 225 minutes.
-    NearEarth,
-    /// Deep-space, period >= 225 minutes.
-    DeepSpace,
-}
+const TWOPId: f64 = 2.0 * std::f64::consts::PI;
+const X2O3: f64 = 2.0 / 3.0;
 
-/// A satellite propagated with SGP4/SDP4. Created via [`Propagator::from_tle`].
+/// Initialized element set for repeated SGP4/SDP4 propagation.
+///
+/// Created via [`Propagator::from_tle`]. Holds the full `elsetrec` state from
+/// the Vallado reference implementation.
 #[derive(Debug, Clone)]
 pub struct Propagator {
-    /// Method chosen based on period.
-    class: OrbitClassification,
-
-    /// Recomputed mean motion (rad/min).
-    no_kozai: f64,
-    /// Eccentricity.
-    e: f64,
-    /// Inclination (rad).
-    i: f64,
-    /// Right ascension of ascending node (rad).
-    nodeo: f64,
-    /// Argument of perigee (rad).
-    argpo: f64,
-    /// Mean anomaly (rad).
-    mo: f64,
-    /// BSTAR drag term.
-    bstar: f64,
-    /// Epoch as minutes since 1949-12-31T00:00 (SGP4 time base).
-    epoch_min: f64,
-
-    // Deep-space constants (zeroed for near-Earth).
-    deep: DeepSpaceContext,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct DeepSpaceContext {
-    /// True if deep-space corrections are active.
-    active: bool,
-    /// Lunar/solar perturbation constants.
-    thdt: f64,
-    /// Resonance flags.
-    resonance: ResonanceKind,
-    /// Sinusoidal terms for secular and periodic corrections.
-    gsto: f64,
-    /// Mean motion for deep space (rad/min).
-    xnq: f64,
-    /// Original mean motion (rad/min).
-    xmnpda: f64,
-    /// Depth of perigee/period resonance.
-    atime: f64,
-    em: f64,
-    argpm: f64,
-    inclm: f64,
-    nodem: f64,
-    mm: f64,
-    xlm: f64,
-    delmt: f64,
-    precomputed: DeepPrecomputed,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-enum ResonanceKind {
-    #[default]
-    None,
-    /// 24-hour (geosynchronous) resonance.
-    Resonance24h,
-    /// No resonance (non-synchronous deep space).
-    NonResonance,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct DeepPrecomputed {
-    // Lunar and solar constants.
-    xldot: f64,
-    omegaq: f64,
-    // gs, ge, sqm, etc., precomputed at init.
-    zsinil: f64,
-    zcosil: f64,
-    zsingl: f64,
-    zcosgl: f64,
-    zsinh: f64,
-    zcosh: f64,
-    zsinhs: f64,
-    zcoshs: f64,
-    // solar and lunar gravitational parameters.
-    zmol: f64,
-    zmos: f64,
-    // precomputed per-orbit terms for 24h resonance.
-    c1: f64,
-    c4: f64,
-    c5: f64,
+    // near-earth constants
+    isimp: i32,
+    method: char,
+    aycof: f64,
+    con41: f64,
+    cc1: f64,
+    cc4: f64,
+    cc5: f64,
     d2: f64,
     d3: f64,
     d4: f64,
+    delmo: f64,
+    eta: f64,
+    argpdot: f64,
+    omgcof: f64,
+    sinmao: f64,
+    t2cof: f64,
+    t3cof: f64,
+    t4cof: f64,
+    t5cof: f64,
+    x1mth2: f64,
+    x7thm1: f64,
+    mdot: f64,
+    nodecf: f64,
+    nodedot: f64,
+    xlcof: f64,
+    xmcof: f64,
+    no_kozai: f64,
+    // epoch elements
+    bstar: f64,
+    ecco: f64,
+    argpo: f64,
+    inclo: f64,
+    mo: f64,
+    nodeo: f64,
+    // deep space
+    irez: i32,
+    d2201: f64,
+    d2211: f64,
+    d3210: f64,
+    d3222: f64,
+    d4410: f64,
+    d4422: f64,
+    d5220: f64,
+    d5232: f64,
+    d5421: f64,
+    d5433: f64,
+    dedt: f64,
     del1: f64,
     del2: f64,
     del3: f64,
-    eosq: f64,
+    didt: f64,
+    dmdt: f64,
+    dnodt: f64,
+    domdt: f64,
+    e3: f64,
+    ee2: f64,
     peo: f64,
+    pgho: f64,
+    pho: f64,
     pinco: f64,
     plo: f64,
     se2: f64,
@@ -150,30 +120,6 @@ struct DeepPrecomputed {
     sl2: f64,
     sl3: f64,
     sl4: f64,
-    s1: f64,
-    s2: f64,
-    s3: f64,
-    s4: f64,
-    s5: f64,
-    s6: f64,
-    s7: f64,
-    ss1: f64,
-    ss2: f64,
-    ss3: f64,
-    ss4: f64,
-    ss5: f64,
-    sz1: f64,
-    sz2: f64,
-    sz3: f64,
-    sz11: f64,
-    sz12: f64,
-    sz13: f64,
-    sz21: f64,
-    sz22: f64,
-    sz23: f64,
-    sz31: f64,
-    sz32: f64,
-    sz33: f64,
     xgh2: f64,
     xgh3: f64,
     xgh4: f64,
@@ -184,410 +130,126 @@ struct DeepPrecomputed {
     xl2: f64,
     xl3: f64,
     xl4: f64,
+    zmol: f64,
+    zmos: f64,
+    atime: f64,
+    xli: f64,
+    xni: f64,
+    #[allow(dead_code)]
+    gsto: f64,
+    xfact: f64,
     xlamo: f64,
-    zm: f64,
-    zmo: f64,
-    // misc
-    q22: f64,
-    q31: f64,
-    q33: f64,
-    g22: f64,
-    g32: f64,
-    g44: f64,
-    g52: f64,
-    g54: f64,
-    fasx2: f64,
-    fasx4: f64,
-    fasx6: f64,
-    root22: f64,
-    root44: f64,
-    root54: f64,
-    rptim: f64,
-    step2: f64,
-    stepn: f64,
-    stepp: f64,
+}
+
+/// Greenwich Mean Sidereal Time (radians) at a Julian date (UT1 days).
+fn gstime(jdut1: f64) -> f64 {
+    let deg2rad = std::f64::consts::PI / 180.0;
+    let tut1 = (jdut1 - 2451545.0) / 36525.0;
+    let mut temp =
+        -6.2e-6 * tut1 * tut1 * tut1 + 0.093104 * tut1 * tut1 + (876600.0 * 3600.0 + 8640184.812866) * tut1
+            + 67310.54841;
+    temp = (temp * deg2rad / 240.0) % TWOPId;
+    if temp < 0.0 {
+        temp += TWOPId;
+    }
+    temp
+}
+
+/// Convert a TLE epoch (MJD) into "days from Jan 0, 1950 0h" used by initl/gstime.
+fn epoch_days_1950(mjd: f64) -> f64 {
+    // MJD 33281.0 == 1950-01-01T00:00; Jan 0 1950 == MJD 33280.0.
+    mjd - 33280.0
+}
+
+/// Lunar/solar long-period periodic sums used by both the `dsinit` baseline
+/// seed (evaluated at `t = 0`, matching the reference `dpper(init='y')` call)
+/// and `dpper`'s per-propagation correction (`init='n'`). Returns raw
+/// `(pe, pinc, pl, pgh, ph)` before any baseline subtraction.
+#[allow(clippy::too_many_arguments)]
+fn dpper_sums(
+    t: f64,
+    zmos: f64,
+    se2: f64,
+    se3: f64,
+    si2: f64,
+    si3: f64,
+    sl2: f64,
+    sl3: f64,
+    sl4: f64,
+    sgh2: f64,
+    sgh3: f64,
+    sgh4: f64,
+    sh2: f64,
+    sh3: f64,
+    zmol: f64,
+    ee2: f64,
+    e3: f64,
+    xi2: f64,
+    xi3: f64,
+    xl2: f64,
+    xl3: f64,
+    xl4: f64,
+    xgh2: f64,
+    xgh3: f64,
+    xgh4: f64,
+    xh2: f64,
+    xh3: f64,
+) -> (f64, f64, f64, f64, f64) {
+    let zns = 1.19459e-5;
+    let zes = 0.01675;
+    let znl = 1.5835218e-4;
+    let zel = 0.05490;
+
+    let mut zm = zmos + zns * t;
+    zm = zm + 2.0 * zes * zm.sin();
+    let sinzf = zm.sin();
+    let f2 = 0.5 * sinzf * sinzf - 0.25;
+    let f3 = -0.5 * sinzf * zm.cos();
+    let ses = se2 * f2 + se3 * f3;
+    let sis = si2 * f2 + si3 * f3;
+    let sls = sl2 * f2 + sl3 * f3 + sl4 * sinzf;
+    let sghs = sgh2 * f2 + sgh3 * f3 + sgh4 * sinzf;
+    let shs = sh2 * f2 + sh3 * f3;
+    let mut zm = zmol + znl * t;
+    zm = zm + 2.0 * zel * zm.sin();
+    let sinzf = zm.sin();
+    let f2 = 0.5 * sinzf * sinzf - 0.25;
+    let f3 = -0.5 * sinzf * zm.cos();
+    let sel = ee2 * f2 + e3 * f3;
+    let sil = xi2 * f2 + xi3 * f3;
+    let sll = xl2 * f2 + xl3 * f3 + xl4 * sinzf;
+    let sghl = xgh2 * f2 + xgh3 * f3 + xgh4 * sinzf;
+    let shll = xh2 * f2 + xh3 * f3;
+    let pe = ses + sel;
+    let pinc = sis + sil;
+    let pl = sls + sll;
+    let pgh = sghs + sghl;
+    let ph = shs + shll;
+    (pe, pinc, pl, pgh, ph)
 }
 
 impl Propagator {
-    /// Build a propagator from a parsed TLE, performing the SGP4/SDP4
-    /// initialization (element set classification, Kozai mean motion, and
-    /// deep-space constant setup).
+    /// Build a propagator from a parsed TLE (equivalent to `sgp4init`).
     pub fn from_tle(tle: &Tle) -> Result<Self> {
-        let xpdotp = 1440.0 / (2.0 * std::f64::consts::PI); // rev/day -> rad/min
-        let no_kozai = tle.mean_motion / xpdotp; // rad/min
-
-        let e = tle.eccentricity;
-        let i = tle.inclination_deg * DEG2RAD;
-        let nodeo = tle.raan_deg * DEG2RAD;
-        let argpo = tle.arg_perigee_deg * DEG2RAD;
-        let mo = tle.mean_anomaly_deg * DEG2RAD;
-        let bstar = tle.bstar;
-
-        // Period classification (minutes).
-        let period_min = 2.0 * std::f64::consts::PI / no_kozai;
-        let class = if period_min >= 225.0 {
-            OrbitClassification::DeepSpace
-        } else {
-            OrbitClassification::NearEarth
-        };
-
-        let mut deep = DeepSpaceContext::default();
-        if class == OrbitClassification::DeepSpace {
-            deep.active = true;
-            deep.xnq = no_kozai;
-            deep.xmnpda = no_kozai;
-            deep.inclm = i;
-            deep.mm = mo;
-            deep.argpm = argpo;
-            deep.nodem = nodeo;
-            deep.em = e;
-            Self::dsinit(&mut deep, no_kozai, e, i, &tle)?;
-        }
-
-        Ok(Propagator {
-            class,
-            no_kozai,
-            e,
-            i,
-            nodeo,
-            argpo,
-            mo,
-            bstar,
-            epoch_min: tle.epoch_mjd() * MIN_PER_DAY + 43200.0 - 0.0, // see below
-            deep,
-        })
-    }
-
-    /// Propagate to `minutes_since_epoch` (tsince).
-    ///
-    /// `tsince` is minutes after the TLE epoch. Negative values are supported
-    /// for backward propagation within the model's advertised accuracy window.
-    pub fn propagate(&self, tsince_min: f64) -> Result<StateVector> {
-        match self.class {
-            OrbitClassification::NearEarth => self.sgp4(tsince_min),
-            OrbitClassification::DeepSpace => self.sdp4(tsince_min),
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // SGP4 near-Earth model
-    // ------------------------------------------------------------------
-    fn sgp4(&self, tsince: f64) -> Result<StateVector> {
-        let tumin = 1.0;
-        let _ = tumin;
-        let mu = MU_EARTH;
-        let radiusearthkm = EARTH_RADIUS_KM;
-        let x2o3 = 2.0 / 3.0;
-
-        let init = Sgp4Init::new(self.no_kozai, self.e, self.i, self.nodeo, self.argpo, self.mo, self.bstar, radiusearthkm, mu, x2o3)?;
-
-        let (p, e, i, node, argp, m, _) = sgp4_tsince(&init, tsince, radiusearthkm, mu, x2o3)?;
-
-        // Solve Kepler's equation for eccentric anomaly.
-        let (eo, _) = solve_kepler(m, e)?;
-        // True anomaly.
-        let (temp, _) = (eo + e * eo.sin()).sin_cos();
-        let _ = temp;
-        let xn = init.no_unkozai;
-        let _ = xn;
-
-        // Position and velocity in perifocal frame.
-        let (r, v) = rv_from_elements(p, e, i, node, argp, eo, mu)?;
-        Ok(StateVector { position_km: r, velocity_kms: v })
-    }
-
-    // ------------------------------------------------------------------
-    // SDP4 deep-space model
-    // ------------------------------------------------------------------
-    fn sdp4(&self, tsince: f64) -> Result<StateVector> {
-        let mu = MU_EARTH;
-        let radiusearthkm = EARTH_RADIUS_KM;
-        let x2o3 = 2.0 / 3.0;
-
-        // Deep-space secular and periodic corrections produce time-updated
-        // mean elements (em, argpm, inclm, nodem, mm).
-        let mut deep = self.deep;
-        let (em, argpm, inclm, nodem, mm) =
-            Self::dspace(&mut deep, tsince, self.no_kozai, self.e, self.i, self.argpo, self.nodeo, self.mo)?;
-
-        // After deep-space corrections, propagate as a near-Earth orbit using
-        // the secularly-updated elements, with the deep-space perturbing
-        // accelerations folded into the equivalent mean motion.
-        let init = Sgp4Init::new(self.no_kozai, em, inclm, nodem, argpm, mm, self.bstar, radiusearthkm, mu, x2o3)?;
-
-        let (p, e, i, node, argp, m, _) = sgp4_tsince(&init, tsince, radiusearthkm, mu, x2o3)?;
-        let (eo, _) = solve_kepler(m, e)?;
-        let (r, v) = rv_from_elements(p, e, i, node, argp, eo, mu)?;
-        Ok(StateVector { position_km: r, velocity_kms: v })
-    }
-
-    // SDP4 initialization: precompute lunar/solar constants and resonance terms.
-    fn dsinit(
-        &self,
-        deep: &mut DeepSpaceContext,
-        _no_kozai: f64,
-        _e: f64,
-        _i: f64,
-        _tle: &Tle,
-    ) -> Result<()> {
-        let mut pc = &mut deep.precomputed;
-        let zes = 0.01675; // (0.5*J3/J2)^2 approx, standard constant
-        pc.zmol = (134.9 + 477.0 * 360.0 / 365.25).to_radians();
-        pc.zmos = (218.0 + 279.0 * 360.0 / 365.25).to_radians() - 0.0;
-        let q22 = 1.7891679e-6;
-        let q31 = 2.1460748e-6;
-        let q33 = 2.2123015e-7;
-        let g22 = 5.7686396;
-        let g32 = 0.9522587;
-        let g44 = 1.8014998;
-        let g52 = 1.0508330;
-        let g54 = 4.4108898;
-        pc.root22 = 1.7891679e-6_f64.sqrt();
-        pc.root44 = 7.3636953e-9_f64.sqrt();
-        pc.root54 = 2.1765803e-9_f64.sqrt();
-        pc.rptim = 4.3752691e-3;
-        pc.q22 = q22;
-        pc.q31 = q31;
-        pc.q33 = q33;
-        pc.g22 = g22;
-        pc.g32 = g32;
-        pc.g44 = g44;
-        pc.g52 = g52;
-        pc.g54 = g54;
-
-        // Resonance classification.
-        let period_earth_rad = self.no_kozai * 1440.0; // rev/day -> rad/day approx
-        let _ = period_earth_rad;
-        if (self.no_kozai * 1440.0 / (2.0 * std::f64::consts::PI) - 1.0).abs() < 0.02 {
-            deep.resonance = ResonanceKind::Resonance24h;
-        } else {
-            deep.resonance = ResonanceKind::NonResonance;
-        }
-
-        let (zcosil, zsinil, zcosgl, zsingl) = init_lunar_solar(&mut pc, deep.inclm);
-        let _ = (zcosil, zsinil, zcosgl, zsingl);
-
-        Ok(())
-    }
-
-    // SDP4 space: apply secular + periodic corrections at time tsince.
-    fn dspace(
-        &self,
-        deep: &mut DeepSpaceContext,
-        tsince: f64,
-        no_kozai: f64,
-        e: f64,
-        i: f64,
-        argpo: f64,
-        nodeo: f64,
-        mo: f64,
-    ) -> Result<(f64, f64, f64, f64, f64)> {
-        if !deep.active {
-            return Ok((e, argpo, i, nodeo, mo));
-        }
-        let pc = deep.precomputed;
-        let _ = pc;
-
-        // Secular corrections (lunar/solar): integrate rates over tsince.
-        // These follow Vallado's dspace secular terms.
-        let xls = deep.xlm + deep.deep_secular_xl_dot() * tsince;
-        let _ = xls;
-
-        // Simplified secular model: advance mean anomaly, raan, argp by
-        // constant rates derived from the deep-space mean motion.
-        let m_dot = no_kozai; // rad/min (mean motion)
-        let mm = mo + m_dot * tsince;
-        let nodem = nodeo + deep.secular_raan_rate(no_kozai) * tsince;
-        let argpm = argpo + deep.secular_argp_rate(no_kozai) * tsince;
-        let inclm = i + deep.secular_incl_rate(no_kozai) * tsince;
-
-        // Periodic corrections (lunar/solar): small sinusoidal perturbations.
-        let (d_m, d_node, d_argp, d_inc) = periodic_lunar_solar(tsince, &deep.precomputed);
-        let mm = mm + d_m;
-        let nodem = nodem + d_node;
-        let argpm = argpm + d_argp;
-        let inclm = inclm + d_inc;
-
-        // 24-hour resonance corrections (simplified: minor).
-        let em = e;
-
-        let mm = mm.rem_euclid(2.0 * std::f64::consts::PI);
-        Ok((em, argpm, inclm, nodem, mm))
-    }
-}
-
-impl DeepSpaceContext {
-    fn deep_secular_xl_dot(&self) -> f64 {
-        self.xnq
-    }
-    fn secular_raan_rate(&self, _no: f64) -> f64 {
-        // Approximate nodal regression from J2 for the deep-space period.
-        // dOmega/dt = -1.5 * n * J2 * (Re/a)^2 * cos(i) / (1-e^2)^2
-        let a = (MU_EARTH / (self.xnq * self.xnq)).powf(1.0 / 3.0); // km
-        let n = self.xnq; // rad/min
-        let re_a = EARTH_RADIUS_KM / a;
-        -1.5 * n * J2 * re_a * re_a * self.inclm.cos()
-    }
-    fn secular_argp_rate(&self, _no: f64) -> f64 {
-        let a = (MU_EARTH / (self.xnq * self.xnq)).powf(1.0 / 3.0);
-        let n = self.xnq;
-        let re_a = EARTH_RADIUS_KM / a;
-        0.75 * n * J2 * re_a * re_a * (4.0 - 5.0 * self.inclm.cos().powi(2))
-    }
-    fn secular_incl_rate(&self, _no: f64) -> f64 {
-        // Inclination change for deep space is small from J2; return 0 here as
-        // the dominant deep-space inclination dynamics come from lunar/solar.
-        0.0
-    }
-}
-
-fn init_lunar_solar(pc: &mut DeepPrecomputed, inclm: f64) -> (f64, f64, f64, f64) {
-    let zcosil = 0.91375164 - 0.03568096 * (inclm * 2.0).cos();
-    let zsinil = (1.0 - zcosil * zcosil).sqrt();
-    let zcosgl = 0.089683511 * (inclm * 2.0).cos() / zsinil;
-    let zsingl = (1.0 - zcosgl * zcosgl).sqrt();
-    pc.zcosil = zcosil;
-    pc.zsinil = zsinil;
-    pc.zcosgl = zcosgl;
-    pc.zsingl = zsingl;
-    pc.zsinh = zsinil;
-    pc.zcosh = zcosil;
-    pc.zsinhs = zsingl;
-    pc.zcoshs = zcosgl;
-    (zcosil, zsinil, zcosgl, zsingl)
-}
-
-fn periodic_lunar_solar(tsince: f64, pc: &DeepPrecomputed) -> (f64, f64, f64, f64) {
-    let _ = pc;
-    // Lunar/solar periodic terms approximated as small sinusoids with the
-    // dominant ~1 rad/day (perigee) and ~0.98 rad/day (node) frequencies.
-    let omega = 2.0 * std::f64::consts::PI / (1440.0); // rad/min (~1 rev/day)
-    let d_m = 1.0e-4 * (omega * tsince).sin();
-    let d_node = 1.0e-4 * (omega * tsince).cos();
-    let d_argp = 1.0e-4 * (omega * tsince * 1.0027).sin();
-    let d_inc = 1.0e-5 * (omega * tsince * 1.0027).cos();
-    (d_m, d_node, d_argp, d_inc)
-}
-
-// ------------------------------------------------------------------
-// SGP4 init + propagation helpers (near-Earth)
-// ------------------------------------------------------------------
-
-struct Sgp4Init {
-    no_unkozai: f64,
-    eo: f64,
-    einv: f64,
-    pio2: f64,
-    muc: f64,
-    tumin: f64,
-    radiusearthkm: f64,
-    x2o3: f64,
-    // common
-    aodp: f64,
-    perige: f64,
-    pinv: f64,
-    posq: f64,
-    con41: f64,
-    con42: f64,
-    cosio: f64,
-    sinio: f64,
-    gsto: f64,
-    // near-earth flags
-    isimp: bool,
-    method: char,
-    aycof: f64,
-    xlcof: f64,
-    // secular
-    omgtot: f64,
-    xnodp: f64,
-    // init
-    c1: f64,
-    c4: f64,
-    c5: f64,
-    d2: f64,
-    d3: f64,
-    d4: f64,
-    delmo: f64,
-    eta: f64,
-    argpm: f64,
-    argpdot: f64,
-    bstar: f64,
-    cc1: f64,
-    cc4: f64,
-    cc5: f64,
-    cosio: f64,
-    // period / classification
-    t2cof: f64,
-    t3cof: f64,
-    t4cof: f64,
-    t5cof: f64,
-    x1mth2: f64,
-    x7thm1: f64,
-    mdot: f64,
-    xmcof: f64,
-    noddot: f64,
-    nodedot: f64,
-    xlcof2: f64,
-    aycof2: f64,
-    // env
-    qoms2t: f64,
-    s4: f64,
-    pinvsr: f64,
-}
-
-impl Sgp4Init {
-    fn new(
-        no_kozai: f64,
-        e: f64,
-        i: f64,
-        nodeo: f64,
-        argpo: f64,
-        mo: f64,
-        bstar: f64,
-        radiusearthkm: f64,
-        mu: f64,
-        x2o3: f64,
-    ) -> Result<Self> {
-        let pio2 = std::f64::consts::PI / 2.0;
-        let mut init = Sgp4Init {
-            no_unkozai: no_kozai,
-            eo: e,
-            einv: 0.0,
-            pio2,
-            muc: mu,
-            tumin: 1.0,
-            radiusearthkm,
-            x2o3,
-            aodp: 0.0,
-            perige: 0.0,
-            pinv: 0.0,
-            posq: 0.0,
-            con41: 0.0,
-            con42: 0.0,
-            cosio: 0.0,
-            sinio: 0.0,
-            gsto: 0.0,
-            isimp: false,
+        // `no` in rad/min via the TLE mean motion (rev/day).
+        let xpdotp = 1440.0 / TWOPId;
+        let no = tle.mean_motion / xpdotp;
+        let mut p = Propagator {
+            isimp: 0,
             method: 'n',
             aycof: 0.0,
-            xlcof: 0.0,
-            omgtot: 0.0,
-            xnodp: 0.0,
-            c1: 0.0,
-            c4: 0.0,
-            c5: 0.0,
+            con41: 0.0,
+            cc1: 0.0,
+            cc4: 0.0,
+            cc5: 0.0,
             d2: 0.0,
             d3: 0.0,
             d4: 0.0,
             delmo: 0.0,
             eta: 0.0,
-            argpm: argpo,
             argpdot: 0.0,
-            bstar,
-            cc1: 0.0,
-            cc4: 0.0,
-            cc5: 0.0,
-            cosio: i.cos(),
+            omgcof: 0.0,
+            sinmao: 0.0,
             t2cof: 0.0,
             t3cof: 0.0,
             t4cof: 0.0,
@@ -595,309 +257,967 @@ impl Sgp4Init {
             x1mth2: 0.0,
             x7thm1: 0.0,
             mdot: 0.0,
-            xmcof: 0.0,
-            noddot: 0.0,
+            nodecf: 0.0,
             nodedot: 0.0,
-            xlcof2: 0.0,
-            aycof2: 0.0,
-            qoms2t: 0.0,
-            s4: 0.0,
-            pinvsr: 0.0,
+            xlcof: 0.0,
+            xmcof: 0.0,
+            no_kozai: no,
+            bstar: tle.bstar,
+            ecco: tle.eccentricity,
+            argpo: tle.arg_perigee_deg * std::f64::consts::PI / 180.0,
+            inclo: tle.inclination_deg * std::f64::consts::PI / 180.0,
+            mo: tle.mean_anomaly_deg * std::f64::consts::PI / 180.0,
+            nodeo: tle.raan_deg * std::f64::consts::PI / 180.0,
+            irez: 0,
+            d2201: 0.0,
+            d2211: 0.0,
+            d3210: 0.0,
+            d3222: 0.0,
+            d4410: 0.0,
+            d4422: 0.0,
+            d5220: 0.0,
+            d5232: 0.0,
+            d5421: 0.0,
+            d5433: 0.0,
+            dedt: 0.0,
+            del1: 0.0,
+            del2: 0.0,
+            del3: 0.0,
+            didt: 0.0,
+            dmdt: 0.0,
+            dnodt: 0.0,
+            domdt: 0.0,
+            e3: 0.0,
+            ee2: 0.0,
+            peo: 0.0,
+            pgho: 0.0,
+            pho: 0.0,
+            pinco: 0.0,
+            plo: 0.0,
+            se2: 0.0,
+            se3: 0.0,
+            sgh2: 0.0,
+            sgh3: 0.0,
+            sgh4: 0.0,
+            sh2: 0.0,
+            sh3: 0.0,
+            si2: 0.0,
+            si3: 0.0,
+            sl2: 0.0,
+            sl3: 0.0,
+            sl4: 0.0,
+            xgh2: 0.0,
+            xgh3: 0.0,
+            xgh4: 0.0,
+            xh2: 0.0,
+            xh3: 0.0,
+            xi2: 0.0,
+            xi3: 0.0,
+            xl2: 0.0,
+            xl3: 0.0,
+            xl4: 0.0,
+            zmol: 0.0,
+            zmos: 0.0,
+            atime: 0.0,
+            xli: 0.0,
+            xni: 0.0,
+            gsto: 0.0,
+            xfact: 0.0,
+            xlamo: 0.0,
         };
 
-        let _ = nodeo;
+        // --- initl ---
+        let epoch = epoch_days_1950(tle.epoch_mjd());
+        let (ao, con42, cosio, cosio2, eccsq, omeosq, _posq, rp, rteosq, sinio, gsto) = {
+            let ecco = p.ecco;
+            let inclo = p.inclo;
+            let eccsq = ecco * ecco;
+            let omeosq = 1.0 - eccsq;
+            let rteosq = omeosq.sqrt();
+            let cosio = inclo.cos();
+            let cosio2 = cosio * cosio;
+            let ak = (XKE / no).powf(X2O3);
+            let d1 = 0.75 * J2 * (3.0 * cosio2 - 1.0) / (rteosq * omeosq);
+            let del = d1 / (ak * ak);
+            let adel = ak * (1.0 - del * del - del * (1.0 / 3.0 + 134.0 * del * del / 81.0));
+            let del = d1 / (adel * adel);
+            let no = no / (1.0 + del);
+            p.no_kozai = no;
+            let ao = (XKE / no).powf(X2O3);
+            let sinio = inclo.sin();
+            let _po = ao * omeosq;
+            let con42 = 1.0 - 5.0 * cosio2;
+            let con41 = -con42 - cosio2 - cosio2;
+            let _ = &mut p;
+            p.con41 = con41;
+            let posq = (ao * omeosq) * (ao * omeosq);
+            let rp = ao * (1.0 - ecco);
+            let gsto = gstime(epoch + 2433281.5);
+            (ao, con42, cosio, cosio2, eccsq, omeosq, posq, rp, rteosq, sinio, gsto)
+        };
+        p.gsto = gsto;
 
-        // Initialization per Vallado SGP4Init.
-        let temp4 = 1.5e-12;
-        let _ = temp4;
-        let mut eccentricity = e;
-        let _ = eccentricity;
+        if omeosq >= 0.0 || no >= 0.0 {
+            p.isimp = 0;
+            if rp < (220.0 / EARTH_RADIUS_KM + 1.0) {
+                p.isimp = 1;
+            }
+            let ss = 78.0 / EARTH_RADIUS_KM + 1.0;
+            let qzms2t = ((120.0 - 78.0) / EARTH_RADIUS_KM).powi(4);
+            let mut sfour = ss;
+            let mut qzms24 = qzms2t;
+            let perige = (rp - 1.0) * EARTH_RADIUS_KM;
+            if perige < 156.0 {
+                sfour = perige - 78.0;
+                if perige < 98.0 {
+                    sfour = 20.0;
+                }
+                qzms24 = ((120.0 - sfour) / EARTH_RADIUS_KM).powi(4);
+                sfour = sfour / EARTH_RADIUS_KM + 1.0;
+            }
+            let pinvsq = 1.0 / (ao * ao * omeosq * omeosq);
+            let tsi = 1.0 / (ao - sfour);
+            p.eta = ao * p.ecco * tsi;
+            let etasq = p.eta * p.eta;
+            let eeta = p.ecco * p.eta;
+            let psisq = (1.0 - etasq).abs();
+            let coef = qzms24 * tsi.powi(4);
+            let coef1 = coef / psisq.powf(3.5);
+            let cc2 = coef1 * no * (ao * (1.0 + 1.5 * etasq + eeta * (4.0 + etasq))
+                + 0.375 * J2 * tsi / psisq * p.con41 * (8.0 + 3.0 * etasq * (8.0 + etasq)));
+            p.cc1 = p.bstar * cc2;
+            let mut cc3 = 0.0;
+            if p.ecco > 1.0e-4 {
+                cc3 = -2.0 * coef * tsi * J3OJ2 * no * sinio / p.ecco;
+            }
+            p.x1mth2 = 1.0 - cosio2;
+            p.cc4 = 2.0 * no * coef1 * ao * omeosq
+                * (p.eta * (2.0 + 0.5 * etasq) + p.ecco * (0.5 + 2.0 * etasq)
+                    - J2 * tsi / (ao * psisq)
+                        * (-3.0 * p.con41 * (1.0 - 2.0 * eeta + etasq * (1.5 - 0.5 * eeta))
+                            + 0.75 * p.x1mth2 * (2.0 * etasq - eeta * (1.0 + etasq)) * (2.0 * p.argpo).cos()));
+            p.cc5 = 2.0 * coef1 * ao * omeosq * (1.0 + 2.75 * (etasq + eeta) + eeta * etasq);
+            let cosio4 = cosio2 * cosio2;
+            let temp1 = 1.5 * J2 * pinvsq * no;
+            let temp2 = 0.5 * temp1 * J2 * pinvsq;
+            let temp3 = -0.46875 * J4 * pinvsq * pinvsq * no;
+            p.mdot = no + 0.5 * temp1 * rteosq * p.con41
+                + 0.0625 * temp2 * rteosq * (13.0 - 78.0 * cosio2 + 137.0 * cosio4);
+            p.argpdot = -0.5 * temp1 * con42
+                + 0.0625 * temp2 * (7.0 - 114.0 * cosio2 + 395.0 * cosio4)
+                + temp3 * (3.0 - 36.0 * cosio2 + 49.0 * cosio4);
+            let xhdot1 = -temp1 * cosio;
+            p.nodedot = xhdot1
+                + (0.5 * temp2 * (4.0 - 19.0 * cosio2) + 2.0 * temp3 * (3.0 - 7.0 * cosio2)) * cosio;
+            let xpidot = p.argpdot + p.nodedot;
+            p.omgcof = p.bstar * cc3 * p.argpo.cos();
+            p.xmcof = 0.0;
+            if p.ecco > 1.0e-4 {
+                p.xmcof = -X2O3 * coef * p.bstar / eeta;
+            }
+            p.nodecf = 3.5 * omeosq * xhdot1 * p.cc1;
+            p.t2cof = 1.5 * p.cc1;
+            if (cosio + 1.0).abs() > 1.5e-12 {
+                p.xlcof = -0.25 * J3OJ2 * sinio * (3.0 + 5.0 * cosio) / (1.0 + cosio);
+            } else {
+                p.xlcof = -0.25 * J3OJ2 * sinio * (3.0 + 5.0 * cosio) / 1.5e-12;
+            }
+            p.aycof = -0.5 * J3OJ2 * sinio;
+            p.delmo = (1.0 + p.eta * p.mo.cos()).powi(3);
+            p.sinmao = p.mo.sin();
+            p.x7thm1 = 7.0 * cosio2 - 1.0;
 
-        // Recover original mean motion and semimajor axis from Kozai.
-        let ak = (mu / (no_kozai * no_kozai)).powf(x2o3);
-        let _ = ak;
+            // --- deep space initialization ---
+            if (TWOPId / no) >= 225.0 {
+                p.method = 'd';
+                p.isimp = 1;
+                let con41 = p.con41;
+                Self::dsinit(&mut p, epoch, no, xpidot, con41);
+            }
 
-        // s / qoms2t constants.
-        let ss = 78.0 / radiusearthkm + 1.0;
-        let qzms2t = ((120.0 - 78.0) / radiusearthkm).powi(4);
-        init.qoms2t = ((78.0 + 1.0) / radiusearthkm).powi(4);
-        let _ = qzms2t;
-        let _ = ss;
+            if p.isimp != 1 {
+                let cc1sq = p.cc1 * p.cc1;
+                p.d2 = 4.0 * ao * tsi * cc1sq;
+                let temp = p.d2 * tsi * p.cc1 / 3.0;
+                p.d3 = (17.0 * ao + sfour) * temp;
+                p.d4 = 0.5 * temp * ao * tsi * (221.0 * ao + 31.0 * sfour) * p.cc1;
+                p.t3cof = p.d2 + 2.0 * cc1sq;
+                p.t4cof = 0.25 * (3.0 * p.d3 + p.cc1 * (12.0 * p.d2 + 10.0 * cc1sq));
+                p.t5cof = 0.2 * (3.0 * p.d4 + 12.0 * p.cc1 * p.d3 + 6.0 * p.d2 * p.d2
+                    + 15.0 * cc1sq * (2.0 * p.d2 + cc1sq));
+            }
+        }
 
-        init.gsto = (nodeo + EARTH_ROTATION_RAD_S * 0.0).rem_euclid(2.0 * std::f64::consts::PI);
-
-        // Compute perigee / apogee and other init terms.
-        sgp4_init_detail(&mut init, no_kozai, e, i, argpo, mo, bstar, radiusearthkm, mu, x2o3)?;
-
-        Ok(init)
+        // Propagate to zero epoch to finalize (matches reference sgp4init).
+        p.propagate(0.0)?;
+        Ok(p)
     }
-}
 
-#[allow(clippy::too_many_arguments)]
-fn sgp4_init_detail(
-    init: &mut Sgp4Init,
-    no_kozai: f64,
-    e: f64,
-    i: f64,
-    _argpo: f64,
-    _mo: f64,
-    bstar: f64,
-    radiusearthkm: f64,
-    mu: f64,
-    x2o3: f64,
-) -> Result<()> {
-    let cosio = i.cos();
-    let sinio = i.sin();
-    let _ = sinio;
-    let theta2 = cosio * cosio;
-    init.cosio = cosio;
-    init.sinio = sinio;
-    let x3theta2 = 3.0 * theta2;
-    init.x1mth2 = 1.0 - theta2;
-    init.x7thm1 = 7.0 * theta2 - 1.0;
-    init.con41 = 3.0 * theta2 - 1.0;
-    init.con42 = 5.0 * theta2 - 1.0;
+    /// Propagate to `tsince` minutes after the TLE epoch (equivalent to `sgp4`).
+    pub fn propagate(&self, tsince: f64) -> Result<StateVector> {
+        let mut p = self.clone();
+        let vkmpersec = EARTH_RADIUS_KM * XKE / 60.0;
 
-    init.posq = 0.0;
-    init.pinv = 0.0;
 
-    // Decide simple/periodics based on eccentricity and period.
-    let a1 = (mu / (no_kozai * no_kozai)).powf(x2o3);
-    let _ = a1;
-    let cosio_ = cosio;
-    let _ = cosio_;
+        // --- update for secular gravity and atmospheric drag ---
+        let xmdf = p.mo + p.mdot * tsince;
+        let argpdf = p.argpo + p.argpdot * tsince;
+        let nodedf = p.nodeo + p.nodedot * tsince;
+        let mut argpm = argpdf;
+        let mut mm = xmdf;
+        let t2 = tsince * tsince;
+        let mut nodem = nodedf + p.nodecf * t2;
+        let mut tempa = 1.0 - p.cc1 * tsince;
+        let mut tempe = p.bstar * p.cc4 * tsince;
+        let mut templ = p.t2cof * t2;
 
-    // s4 and qoms2t.
-    let ss = 78.0 / radiusearthkm + 1.0;
-    let qzms2t = ((120.0 - 78.0) / radiusearthkm).powi(4);
-    let _ = qzms2t;
-    init.s4 = ss;
-    init.qoms2t = ((78.0 + 1.0) / radiusearthkm).powi(4);
+        if p.isimp != 1 {
+            let delomg = p.omgcof * tsince;
+            let delm = p.xmcof * ((1.0 + p.eta * xmdf.cos()).powi(3) - p.delmo);
+            let temp = delomg + delm;
+            mm = xmdf + temp;
+            argpm = argpdf - temp;
+            let t3 = t2 * tsince;
+            let t4 = t3 * tsince;
+            tempa = tempa - p.d2 * t2 - p.d3 * t3 - p.d4 * t4;
+            tempe = tempe + p.bstar * p.cc5 * (mm.sin() - p.sinmao);
+            templ = templ + p.t3cof * t3 + t4 * (p.t4cof + tsince * p.t5cof);
+        }
 
-    // Perigee and period classification for simple model.
-    let perige = (a1 * (1.0 - e) - 1.0) * radiusearthkm;
-    init.perige = perige;
-    init.isimp = perige < 220.0 && no_kozai >= 0.0;
+        let mut nm = p.no_kozai;
+        let mut em = p.ecco;
+        let mut inclm = p.inclo;
 
-    // Compute aodp (semimajor axis of decaying orbit), using atmospheric drag
-    // correction (simplified, no real atmosphere model applied to a1 here).
-    let aodp = a1;
-    init.aodp = aodp;
+        if p.method == 'd' {
+            let mut tc = tsince;
+            Self::dspace(&mut p, tc, &mut em, &mut argpm, &mut inclm, &mut nodem, &mut nm, &mut mm);
+        }
 
-    let _ = bstar;
+        if nm <= 0.0 {
+            return Err(OrbitError::TimeOutOfRange("mean motion <= 0".into()));
+        }
+        let am = (XKE / nm).powf(X2O3) * tempa * tempa;
+        nm = XKE / am.powf(1.5);
+        em = em - tempe;
+        if em >= 1.0 || em < -0.001 {
+            return Err(OrbitError::TimeOutOfRange("eccentricity out of range".into()));
+        }
+        if em < 1.0e-6 {
+            em = 1.0e-6;
+        }
+        mm = mm + p.no_kozai * templ;
+        let mut xlm = mm + argpm + nodem;
+        let emsq = em * em;
+        let temp = 1.0 - emsq;
 
-    // xnodp (mean motion of decaying orbit) — for the simplified model xnodp = no.
-    init.xnodp = no_kozai;
+        nodem = nodem.rem_euclid(TWOPId);
+        argpm = argpm.rem_euclid(TWOPId);
+        xlm = xlm.rem_euclid(TWOPId);
+        mm = (xlm - argpm - nodem).rem_euclid(TWOPId);
 
-    // Compute derived constants c1, c4, c5, d2..d4, etc.
-    let eta = aodp * e;
-    init.eta = eta;
-    let etasq = eta * eta;
-    let eeta = e * eta;
-    let _ = eeta;
-    let pinv = 1.0 / (aodp * (1.0 - e * e));
-    init.pinv = pinv;
-    let posq = pinv * pinv;
-    init.posq = posq;
+        let sinim = inclm.sin();
+        let cosim = inclm.cos();
 
-    let temp1 = 1.5 * J2 * pinv * init.x1mth2;
-    let temp2 = 0.5 * temp1 * J2 * pinv;
-    let temp3 = -0.46875 * J2 * J2 * pinv * pinv * init.con41;
-    init.mdot = no_kozai + 0.5 * temp1 * eta * eta * init.con42
-        + 0.5 * temp2 * eta * (4.0 + 2.5 * eta * eta)
-        + 0.5 * temp3 * eta * (2.0 + 1.5 * eta * eta);
-    let _ = temp3;
-    init.argpdot = (-0.5 * temp1 * init.con41 + temp2 * (2.0 - 3.0 * eta * eta)
-        + 0.5 * temp3 * (4.0 - 11.0 * eta * eta))
-        * (1.0 - 3.0 * theta2) // (1 - 1.5*sin^2 i)... approximated
-        + 0.5 * J2 * pinv * init.x7thm1 * eta;
-    let _ = pinv;
-    let xhdot1 = -no_kozai * 0.5 * J2 * pinv * init.con41;
-    init.nodedot = xhdot1 / (1.0 + 3.5 * eta * eta * (1.0 + eta * eta) * 0.0);
-    let _ = xhdot1;
+        // long period periodics
+        let mut ep = em;
+        let mut xincp = inclm;
+        let mut argpp = argpm;
+        let mut nodep = nodem;
+        let mut mp = mm;
+        let mut sinip = sinim;
+        let mut cosip = cosim;
+        if p.method == 'd' {
+            Self::dpper(&mut p, tsince, &mut ep, &mut xincp, &mut nodep, &mut argpp, &mut mp);
+            if xincp < 0.0 {
+                xincp = -xincp;
+                nodep = nodep + std::f64::consts::PI;
+                argpp = argpp - std::f64::consts::PI;
+            }
+            if ep < 1.0e-6 {
+                ep = 1.0e-6;
+            } else if ep >= 1.0 {
+                ep = 1.0 - 1.0e-6;
+            }
+            sinip = xincp.sin();
+            cosip = xincp.cos();
+            p.aycof = -0.5 * J3OJ2 * sinip;
+            if (cosip + 1.0).abs() > 1.5e-12 {
+                p.xlcof = -0.25 * J3OJ2 * sinip * (3.0 + 5.0 * cosip) / (1.0 + cosip);
+            } else {
+                p.xlcof = -0.25 * J3OJ2 * sinip * (3.0 + 5.0 * cosip) / 1.5e-12;
+            }
+        }
+        let axnl = ep * argpp.cos();
+        let temp = 1.0 / (am * (1.0 - ep * ep));
+        let aynl = ep * argpp.sin() + temp * p.aycof;
+        let mut xl = mp + argpp + nodep + temp * p.xlcof * axnl;
 
-    // c1, c4, c5 (atmospheric drag terms).
-    let c1sq = temp2 * temp2;
-    init.c1 = bstar * temp2;
-    init.c4 = 2.0 * pinv * init.posq * (1.0 - eeta + 1.5 * etasq * (1.0 + eeta));
-    init.c5 = 2.0 * pinv * init.posq * (1.0 + 2.75 * (eeta + etasq));
-    let _ = c1sq;
+        // solve Kepler's equation
+        let mut u = (xl - nodep).rem_euclid(TWOPId);
+        let mut eo1 = u;
+        let mut tem5: f64 = 9999.9;
+        let mut ktr = 1;
+        while tem5.abs() >= 1.0e-12 && ktr <= 10 {
+            let sineo1 = eo1.sin();
+            let coseo1 = eo1.cos();
+            tem5 = 1.0 - coseo1 * axnl - sineo1 * aynl;
+            tem5 = (u - aynl * coseo1 + axnl * sineo1 - eo1) / tem5;
+            if tem5.abs() >= 0.95 {
+                tem5 = if tem5 > 0.0 { 0.95 } else { -0.95 };
+            }
+            eo1 = eo1 + tem5;
+            ktr += 1;
+        }
 
-    // d2, d3, d4 (secular drag terms).
-    init.d2 = 4.0 * aodp * pinv * temp1 * init.c1;
-    let d3tmp = (4.0 * aodp * aodp * pinv * temp1 * temp1 * init.c1 * init.c1).max(-1e-30);
-    init.d3 = 8.0 / 3.0 * d3tmp.max(0.0);
-    let _ = d3tmp;
-    init.d4 = 8.0 / 3.0 * aodp * aodp * pinv * pinv * temp1 * init.c1 * (2.0 * init.c1 + init.c1);
-    let _ = etasq;
+        // short period preliminary quantities
+        let ecose = axnl * eo1.cos() + aynl * eo1.sin();
+        let esine = axnl * eo1.sin() - aynl * eo1.cos();
+        let el2 = axnl * axnl + aynl * aynl;
+        let pl = am * (1.0 - el2);
+        if pl < 0.0 {
+            return Err(OrbitError::TimeOutOfRange("semi-latus rectum < 0".into()));
+        }
+        let rl = am * (1.0 - ecose);
+        let rdotl = am.sqrt() * esine / rl;
+        let rvdotl = pl.sqrt() / rl;
+        let betal = (1.0 - el2).sqrt();
+        let temp = esine / (1.0 + betal);
+        let sinu = am / rl * (eo1.sin() - aynl - axnl * temp);
+        let cosu = am / rl * (eo1.cos() - axnl + aynl * temp);
+        let su = sinu.atan2(cosu);
+        let sin2u = (cosu + cosu) * sinu;
+        let cos2u = 1.0 - 2.0 * sinu * sinu;
+        let temp = 1.0 / pl;
+        let temp1 = 0.5 * J2 * temp;
+        let temp2 = temp1 * temp;
 
-    init.cc1 = init.c1 * (1.0 + 2.25 * etasq + 1.5 * eeta);
-    init.cc4 = 2.0 * pinv * init.posq * (1.0 - eeta + 1.5 * etasq * (1.0 + eeta))
-        * (2.5 * (init.c1 + bstar) + init.c4);
-    init.cc5 = 2.0 * pinv * init.posq * (1.0 + 2.75 * (eeta + etasq))
-        * (2.5 * (init.c1 + bstar) + init.c5);
+        if p.method == 'd' {
+            let cosisq = cosip * cosip;
+            p.con41 = 3.0 * cosisq - 1.0;
+            p.x1mth2 = 1.0 - cosisq;
+            p.x7thm1 = 7.0 * cosisq - 1.0;
+        }
+        let mrt = rl * (1.0 - 1.5 * temp2 * betal * p.con41) + 0.5 * temp1 * p.x1mth2 * cos2u;
+        let su = su - 0.25 * temp2 * p.x7thm1 * sin2u;
+        let xnode = nodep + 1.5 * temp2 * cosip * sin2u;
+        let xinc = xincp + 1.5 * temp2 * cosip * sinip * cos2u;
+        let mvt = rdotl - nm * temp1 * p.x1mth2 * sin2u / XKE;
+        let rvdot = rvdotl + nm * temp1 * (p.x1mth2 * cos2u + 1.5 * p.con41) / XKE;
 
-    init.delmo = (1.0 - eta * eta).powf(1.5);
+        let sinsu = su.sin();
+        let cossu = su.cos();
+        let snod = xnode.sin();
+        let cnod = xnode.cos();
+        let sini = xinc.sin();
+        let cosi = xinc.cos();
+        let xmx = -snod * cosi;
+        let xmy = cnod * cosi;
+        let ux = xmx * sinsu + cnod * cossu;
+        let uy = xmy * sinsu + snod * cossu;
+        let uz = sini * sinsu;
+        let vx = xmx * cossu - cnod * sinsu;
+        let vy = xmy * cossu - snod * cossu;
+        let vz = sini * cossu;
 
-    // t series coefficients.
-    init.t2cof = init.c1 * init.c1 * 1.5;
-    init.t3cof = init.c1 * init.delmo * 0.5;
-    init.t4cof = init.delmo * init.c1 * init.c1 * 3.0;
-    init.t5cof = init.delmo * (1.0 + 2.25 * eta * eta) * init.c1 * 0.5;
+        let position_km = [
+            mrt * ux * EARTH_RADIUS_KM,
+            mrt * uy * EARTH_RADIUS_KM,
+            mrt * uz * EARTH_RADIUS_KM,
+        ];
+        let velocity_kms = [
+            (mvt * ux + rvdot * vx) * vkmpersec,
+            (mvt * uy + rvdot * vy) * vkmpersec,
+            (mvt * uz + rvdot * vz) * vkmpersec,
+        ];
 
-    init.xmcof = -2.0 / 3.0 * J2 * pinv;
+        Ok(StateVector { position_km, velocity_kms })
+    }
 
-    // xlcof / aycof for lunar-solar periodics (only matter for deep space;
-    // near-Earth they remain zero).
-    init.xlcof = 0.0;
-    init.aycof = 0.0;
-    init.xlcof2 = 0.0;
-    init.aycof2 = 0.0;
+    // ------------------------------------------------------------------
+    // Deep space: dscom + dsinit + dpper + dspace
+    // ------------------------------------------------------------------
+    #[allow(clippy::too_many_arguments)]
+    fn dsinit(&mut self, epoch: f64, no: f64, xpidot: f64, _con41: f64) {
+        let zns = 1.19459e-5;
+        let znl = 1.5835218e-4;
+        let zes = 0.01675;
+        let zel = 0.05490;
+        let c1ss = 2.9864797e-6;
+        let c1l = 4.7968065e-7;
+        let zsinis = 0.39785416;
+        let zcosis = 0.91744867;
+        let zcosgs = 0.1945905;
+        let zsings = -0.98088458;
 
-    init.pinvsr = pinv;
+        let em = self.ecco;
+        let emsq = em * em;
+        let argpp = self.argpo;
+        let mut inclp = self.inclo;
+        let nodep = self.nodeo;
+        let nm = no;
 
-    Ok(())
-}
+        let snodm = nodep.sin();
+        let cnodm = nodep.cos();
+        let sinomm = argpp.sin();
+        let cosomm = argpp.cos();
+        let sinim = inclp.sin();
+        let cosim = inclp.cos();
+        let emsq_ = emsq;
+        let _betasq = 1.0 - emsq_;
 
-/// Propagate the initialized SGP4 model for `tsince` minutes, returning the
-/// classical elements (p, e, i, raan, argp, m) and the secular rates.
-fn sgp4_tsince(
-    init: &Sgp4Init,
-    tsince: f64,
-    radiusearthkm: f64,
-    mu: f64,
-    _x2o3: f64,
-) -> Result<(f64, f64, f64, f64, f64, f64)> {
-    let e = init.eo;
-    let i = (init.cosio.acos()).copysign(init.sinio.signum().max(1e-12));
+        let day = epoch + 18261.5;
+        let xnodce = (4.5236020 - 9.2422029e-4 * day) % TWOPId;
+        let stem = xnodce.sin();
+        let ctem = xnodce.cos();
+        let zcosil = 0.91375164 - 0.03568096 * ctem;
+        let zsinil = (1.0 - zcosil * zcosil).sqrt();
+        let zsinhl = 0.089683511 * stem / zsinil;
+        let zcoshl = (1.0 - zsinhl * zsinhl).sqrt();
+        let gam = 5.8351514 + 0.0019443680 * day;
+        let mut zx = 0.39785416 * stem / zsinil;
+        let zy = zcoshl * ctem + 0.91744867 * zsinhl * stem;
+        zx = zx.atan2(zy);
+        let zx = gam + zx - xnodce;
+        let zcosgl = zx.cos();
+        let zsingl = zx.sin();
 
-    // Secularly updated mean anomaly, raan, argp.
-    let mm = init.no_unkozai * tsince; // placeholder; real m added by caller's mo
-    let _ = mm;
+        let mut zcosg = zcosgs;
+        let mut zsing = zsings;
+        let mut zcosi = zcosis;
+        let mut zsini = zsinis;
+        let mut zcosh = cnodm;
+        let mut zsinh = snodm;
+        let mut cc = c1ss;
+        let xnoi = 1.0 / nm;
 
-    let temp_m = init.no_unkozai * tsince;
-    let _ = temp_m;
+        let mut z31 = 0.0;
+        let mut z32 = 0.0;
+        let mut z33 = 0.0;
+        let mut z1 = 0.0;
+        let mut z2 = 0.0;
+        let mut z3 = 0.0;
+        let mut z11 = 0.0;
+        let mut z12 = 0.0;
+        let mut z13 = 0.0;
+        let mut z21 = 0.0;
+        let mut z22 = 0.0;
+        let mut z23 = 0.0;
+        let mut z11_ = 0.0;
+        let mut z13_ = 0.0;
+        let mut z21_ = 0.0;
+        let mut z23_ = 0.0;
+        let mut z31_ = 0.0;
+        let mut z33_ = 0.0;
+        let mut s1 = 0.0;
+        let mut s2 = 0.0;
+        let mut s3 = 0.0;
+        let mut s4 = 0.0;
+        let mut s5 = 0.0;
+        let mut s6 = 0.0;
+        let mut s7 = 0.0;
+        let mut ss1 = 0.0;
+        let mut ss2 = 0.0;
+        let mut ss3 = 0.0;
+        let mut ss4 = 0.0;
+        let mut ss5 = 0.0;
+        let mut ss6 = 0.0;
+        let mut ss7 = 0.0;
+        let mut sz1 = 0.0;
+        let mut sz2 = 0.0;
+        let mut sz3 = 0.0;
+        let mut sz11 = 0.0;
+        let mut sz12 = 0.0;
+        let mut sz13 = 0.0;
+        let mut sz21 = 0.0;
+        let mut sz22 = 0.0;
+        let mut sz23 = 0.0;
+        let mut sz31 = 0.0;
+        let mut sz32 = 0.0;
+        let mut sz33 = 0.0;
+        let mut xgh2 = 0.0;
+        let mut xgh3 = 0.0;
+        let mut xgh4 = 0.0;
+        let mut xh2 = 0.0;
+        let mut xh3 = 0.0;
+        let mut xi2 = 0.0;
+        let mut xi3 = 0.0;
+        let mut xl2 = 0.0;
+        let mut xl3 = 0.0;
+        let mut xl4 = 0.0;
 
-    // For near-earth, the mean anomaly at tsince is mo + mdot*tsince; mo is 0
-    // here because we fold the epoch anomaly into the perifocal solve. We pass
-    // back m = no*tsince and let rv_from_elements add the epoch mean anomaly via
-    // the caller. To keep this self-contained, return m = no_unkozai*tsince.
-    let m = init.no_unkozai * tsince;
+        for lsflg in 1..=2 {
+            let a1 = zcosg * zcosh + zsing * zcosi * zsinh;
+            let a3 = -zsing * zcosh + zcosg * zcosi * zsinh;
+            let a7 = -zcosg * zsinh + zsing * zcosi * zcosh;
+            let a8 = zsing * zsini;
+            let a9 = zsing * zsinh + zcosg * zcosi * zcosh;
+            let a10 = zcosg * zsini;
+            let a2 = cosim * a7 + sinim * a8;
+            let a4 = cosim * a9 + sinim * a10;
+            let a5 = -sinim * a7 + cosim * a8;
+            let a6 = -sinim * a9 + cosim * a10;
+            let x1 = a1 * cosomm + a2 * sinomm;
+            let x2 = a3 * cosomm + a4 * sinomm;
+            let x3 = -a1 * sinomm + a2 * cosomm;
+            let x4 = -a3 * sinomm + a4 * cosomm;
+            let x5 = a5 * sinomm;
+            let x6 = a6 * sinomm;
+            let x7 = a5 * cosomm;
+            let x8 = a6 * cosomm;
+            z31 = 12.0 * x1 * x1 - 3.0 * x3 * x3;
+            z32 = 24.0 * x1 * x2 - 6.0 * x3 * x4;
+            z33 = 12.0 * x2 * x2 - 3.0 * x4 * x4;
+            z1 = 3.0 * (a1 * a1 + a2 * a2) + z31 * emsq;
+            z2 = 6.0 * (a1 * a3 + a2 * a4) + z32 * emsq;
+            z3 = 3.0 * (a3 * a3 + a4 * a4) + z33 * emsq;
+            z11 = -6.0 * a1 * a5 + emsq * (-24.0 * x1 * x7 - 6.0 * x3 * x5);
+            z12 = -6.0 * (a1 * a6 + a3 * a5) + emsq * (-24.0 * (x2 * x7 + x1 * x8) - 6.0 * (x3 * x6 + x4 * x5));
+            z13 = -6.0 * a3 * a6 + emsq * (-24.0 * x2 * x8 - 6.0 * x4 * x6);
+            z21 = 6.0 * a2 * a5 + emsq * (24.0 * x1 * x5 - 6.0 * x3 * x7);
+            z22 = 6.0 * (a4 * a5 + a2 * a6) + emsq * (24.0 * (x2 * x5 + x1 * x6) - 6.0 * (x4 * x7 + x3 * x8));
+            z23 = 6.0 * a4 * a6 + emsq * (24.0 * x2 * x6 - 6.0 * x4 * x8);
+            z1 = z1 + z1 + _betasq * z31;
+            z2 = z2 + z2 + _betasq * z32;
+            z3 = z3 + z3 + _betasq * z33;
+            s3 = cc * xnoi;
+            s2 = -0.5 * s3 / (1.0 - emsq).sqrt();
+            s4 = s3 * (1.0 - emsq).sqrt();
+            s1 = -15.0 * em * s4;
+            s5 = x1 * x3 + x2 * x4;
+            s6 = x2 * x3 + x1 * x4;
+            s7 = x2 * x4 - x1 * x3;
 
-    let node = init.gsto + init.nodedot * tsince;
-    let argp = init.argpm + init.argpdot * tsince;
-    let _ = radiusearthkm;
-    let _ = mu;
+            if lsflg == 1 {
+                ss1 = s1;
+                ss2 = s2;
+                ss3 = s3;
+                ss4 = s4;
+                ss5 = s5;
+                ss6 = s6;
+                ss7 = s7;
+                sz1 = z1;
+                sz2 = z2;
+                sz3 = z3;
+                sz11 = z11;
+                sz12 = z12;
+                sz13 = z13;
+                sz21 = z21;
+                sz22 = z22;
+                sz23 = z23;
+                sz31 = z31;
+                sz32 = z32;
+                sz33 = z33;
+                zcosg = zcosgl;
+                zsing = zsingl;
+                zcosi = zcosil;
+                zsini = zsinil;
+                zcosh = zcoshl * cnodm + zsinhl * snodm;
+                zsinh = snodm * zcoshl - cnodm * zsinhl;
+                cc = c1l;
+            }
+        }
 
-    // Atmospheric drag: secular periodics update a and e.
-    let em = e - init.bstar * init.c4 * tsince;
-    let mut a = init.aodp * (1.0 - init.c1 * tsince - init.d2 * tsince * tsince
-        - init.d3 * tsince * tsince * tsince
-        - init.d4 * tsince * tsince * tsince * tsince);
-    // recovered mean motion
-    let _ = a;
-    let p = init.pinv.recip();
-    let _ = p;
+        let zmol = (4.7199672 + 0.22997150 * day - gam) % TWOPId;
+        let zmos = (6.2565837 + 0.017201977 * day) % TWOPId;
 
-    // Use the original perifocal parameter p from the epoch (drag-corrected p).
-    let p = init.aodp * (1.0 - em * em) * radiusearthkm * radiusearthkm / (init.radiusearthkm * init.radiusearthkm);
-    let p = init.aodp * (1.0 - em * em) * radiusearthkm * radiusearthkm / (init.radiusearthkm.powi(2));
-    let p = init.aodp * (1.0 - em * em);
-    let _ = p;
+        // solar terms
+        let se2 = 2.0 * ss1 * ss6;
+        let se3 = 2.0 * ss1 * ss7;
+        let si2 = 2.0 * ss2 * sz12;
+        let si3 = 2.0 * ss2 * (sz13 - sz11);
+        let sl2 = -2.0 * ss3 * sz2;
+        let sl3 = -2.0 * ss3 * (sz3 - sz1);
+        let sl4 = -2.0 * ss3 * (-21.0 - 9.0 * emsq) * zes;
+        let sgh2 = 2.0 * ss4 * sz32;
+        let sgh3 = 2.0 * ss4 * (sz33 - sz31);
+        let sgh4 = -18.0 * ss4 * zes;
+        let sh2 = -2.0 * ss2 * sz22;
+        let sh3 = -2.0 * ss2 * (sz23 - sz21);
+        // lunar terms
+        let ee2 = 2.0 * s1 * s6;
+        let e3 = 2.0 * s1 * s7;
+        let xi2 = 2.0 * s2 * z12;
+        let xi3 = 2.0 * s2 * (z13 - z11);
+        let xl2 = -2.0 * s3 * z2;
+        let xl3 = -2.0 * s3 * (z3 - z1);
+        let xl4 = -2.0 * s3 * (-21.0 - 9.0 * emsq) * zel;
+        let xgh2 = 2.0 * s4 * z32;
+        let xgh3 = 2.0 * s4 * (z33 - z31);
+        let xgh4 = -18.0 * s4 * zel;
+        let xh2 = -2.0 * s2 * z22;
+        let xh3 = -2.0 * s2 * (z23 - z21);
 
-    let pm = init.aodp * (1.0 - em * em);
-    let _ = pm;
+        let _ = (zcosgs, zsings, zcosis, zsinis, zcoshl, zsinhl, z11_, z13_, z21_, z23_, z31_, z33_);
 
-    // Return p (perifocal parameter in km) using radiusearthkm scale.
-    let p_km = init.aodp * (1.0 - em * em);
-    let p_km = p_km; // aodp is in km (a1 computed from mu in km^3/s^2)
-    let _ = mu;
+        // Seed the lunar/solar periodic baseline at t=0 (equivalent to the
+        // reference's `dpper(init='y')` call, made once right after `dscom`
+        // and before `dsinit`'s resonance setup). Every later `dpper`
+        // ('n') call subtracts this baseline to get the periodic *change*
+        // since epoch.
+        // The reference `dscom` initializes these baselines to 0.0 and never
+        // updates them (confirmed against the canonical implementation) —
+        // `dpper`'s per-call periodic correction is the raw lunar/solar sum,
+        // not a delta from a nonzero epoch baseline.
+        let (peo, pinco, plo, pgho, pho): (f64, f64, f64, f64, f64) = (0.0, 0.0, 0.0, 0.0, 0.0);
 
-    Ok((p_km, em, i, node, argp, m, (init.mdot, init.nodedot, init.argpdot)))
-}
+        // --- dsinit ---
+        let mut irez = 0;
+        if (nm < 0.0052359877) && (nm > 0.0034906585) {
+            irez = 1;
+        }
+        if (nm >= 8.26e-3) && (nm <= 9.24e-3) && (em >= 0.5) {
+            irez = 2;
+        }
+        let mut ses = ss1 * zns * ss5;
+        let mut sis = ss2 * zns * (sz11 + sz13);
+        let sls = -zns * ss3 * (sz1 + sz3 - 14.0 - 6.0 * emsq);
+        let sghs = ss4 * zns * (sz31 + sz33 - 6.0);
+        let mut shs = -zns * ss2 * (sz21 + sz23);
+        if (inclp < 5.2359877e-2) || (inclp > std::f64::consts::PI - 5.2359877e-2) {
+            shs = 0.0;
+        }
+        if sinim != 0.0 {
+            shs = shs / sinim;
+        }
+        let sgs = sghs - cosim * shs;
+        let dedt = ses + s1 * znl * s5;
+        let didt = sis + s2 * znl * (z11 + z13);
+        let dmdt = sls - znl * s3 * (z1 + z3 - 14.0 - 6.0 * emsq);
+        let sghl = s4 * znl * (z31 + z33 - 6.0);
+        let mut shll = -znl * s2 * (z21 + z23);
+        if (inclp < 5.2359877e-2) || (inclp > std::f64::consts::PI - 5.2359877e-2) {
+            shll = 0.0;
+        }
+        let mut domdt = sgs + sghl;
+        let mut dnodt = shs;
+        if sinim != 0.0 {
+            domdt = domdt - cosim / sinim * shll;
+            dnodt = dnodt + shll / sinim;
+        }
+        let theta = (self.gsto + 0.0 * 4.37526908801129966e-3) % TWOPId;
 
-/// Solve Kepler's equation M = E - e sin E via Newton-Raphson.
-fn solve_kepler(m: f64, e: f64) -> Result<(f64, u32)> {
-    let mut e0 = if e < 0.8 { m } else { std::f64::consts::PI };
-    let mut count = 0u32;
-    for _ in 0..100 {
-        count += 1;
-        let f = e0 - e * e0.sin() - m;
-        let fp = 1.0 - e * e0.cos();
-        let delta = f / fp;
-        e0 -= delta;
-        if delta.abs() < 1e-12 {
-            break;
+        if irez != 0 {
+            let aonv = (nm / XKE).powf(X2O3);
+            if irez == 2 {
+                let cosisq = cosim * cosim;
+                let mut emsq_ = em * em;
+                let eoc = em * emsq_;
+                let g201 = -0.306 - (em - 0.64) * 0.440;
+                let (mut g211, mut g310, mut g322, mut g410, mut g422, mut g520, mut g533, mut g521, mut g532);
+                if em <= 0.65 {
+                    g211 = 3.616 - 13.2470 * em + 16.2900 * emsq_;
+                    g310 = -19.302 + 117.3900 * em - 228.4190 * emsq_ + 156.5910 * eoc;
+                    g322 = -18.9068 + 109.7927 * em - 214.6334 * emsq_ + 146.5816 * eoc;
+                    g410 = -41.122 + 242.6940 * em - 471.0940 * emsq_ + 313.9530 * eoc;
+                    g422 = -146.407 + 841.8800 * em - 1629.014 * emsq_ + 1083.4350 * eoc;
+                    g520 = -532.114 + 3017.977 * em - 5740.032 * emsq_ + 3708.2760 * eoc;
+                } else {
+                    g211 = -72.099 + 331.819 * em - 508.738 * emsq_ + 266.724 * eoc;
+                    g310 = -346.844 + 1582.851 * em - 2415.925 * emsq_ + 1246.113 * eoc;
+                    g322 = -342.585 + 1554.908 * em - 2366.899 * emsq_ + 1215.972 * eoc;
+                    g410 = -1052.797 + 4758.686 * em - 7193.992 * emsq_ + 3651.957 * eoc;
+                    g422 = -3581.690 + 16178.110 * em - 24462.770 * emsq_ + 12422.520 * eoc;
+                    if em > 0.715 {
+                        g520 = -5149.66 + 29936.92 * em - 54087.36 * emsq_ + 31324.56 * eoc;
+                    } else {
+                        g520 = 1464.74 - 4664.75 * em + 3763.64 * emsq_;
+                    }
+                }
+                if em < 0.7 {
+                    g533 = -919.22770 + 4988.6100 * em - 9064.7700 * emsq_ + 5542.21 * eoc;
+                    g521 = -822.71072 + 4568.6173 * em - 8491.4146 * emsq_ + 5337.524 * eoc;
+                    g532 = -853.66600 + 4690.2500 * em - 8624.7700 * emsq_ + 5341.4 * eoc;
+                } else {
+                    g533 = -37995.780 + 161616.52 * em - 229838.20 * emsq_ + 109377.94 * eoc;
+                    g521 = -51752.104 + 218913.95 * em - 309468.16 * emsq_ + 146349.42 * eoc;
+                    g532 = -40023.880 + 170470.89 * em - 242699.48 * emsq_ + 115605.82 * eoc;
+                }
+                let sini2 = sinim * sinim;
+                let f220 = 0.75 * (1.0 + 2.0 * cosim + cosisq);
+                let f221 = 1.5 * sini2;
+                let f321 = 1.875 * sinim * (1.0 - 2.0 * cosim - 3.0 * cosisq);
+                let f322 = -1.875 * sinim * (1.0 + 2.0 * cosim - 3.0 * cosisq);
+                let f441 = 35.0 * sini2 * f220;
+                let f442 = 39.3750 * sini2 * sini2;
+                let f522 = 9.84375 * sinim * (sini2 * (1.0 - 2.0 * cosim - 5.0 * cosisq)
+                    + 0.33333333 * (-2.0 + 4.0 * cosim + 6.0 * cosisq));
+                let f523 = sinim * (4.92187512 * sini2 * (-2.0 - 4.0 * cosim + 10.0 * cosisq)
+                    + 6.56250012 * (1.0 + 2.0 * cosim - 3.0 * cosisq));
+                let f542 = 29.53125 * sinim * (2.0 - 8.0 * cosim + cosisq * (-12.0 + 8.0 * cosim + 10.0 * cosisq));
+                let f543 = 29.53125 * sinim * (-2.0 - 8.0 * cosim + cosisq * (12.0 + 8.0 * cosim - 10.0 * cosisq));
+                let xno2 = nm * nm;
+                let ainv2 = aonv * aonv;
+                let mut temp1 = 3.0 * xno2 * ainv2;
+                let mut temp = temp1 * 7.3636953e-9_f64.sqrt();
+                let d2201 = temp * f220 * g201;
+                let d2211 = temp * f221 * g211;
+                temp1 = temp1 * aonv;
+                let temp = temp1 * 3.7393792e-7_f64.sqrt();
+                let d3210 = temp * f321 * g310;
+                let d3222 = temp * f322 * g322;
+                temp1 = temp1 * aonv;
+                let temp = 2.0 * temp1 * 7.3636953e-9_f64.sqrt();
+                let d4410 = temp * f441 * g410;
+                let d4422 = temp * f442 * g422;
+                temp1 = temp1 * aonv;
+                let temp = temp1 * 1.1428639e-7_f64.sqrt();
+                let d5220 = temp * f522 * g520;
+                let d5232 = temp * f523 * g532;
+                let temp = 2.0 * temp1 * 2.1765803e-9_f64.sqrt();
+                let d5421 = temp * f542 * g521;
+                let d5433 = temp * f543 * g533;
+                let xlamo = (self.mo + self.nodeo + self.nodeo - theta - theta) % TWOPId;
+                let xfact = self.mdot + dmdt + 2.0 * (self.nodedot + dnodt - 4.37526908801129966e-3) - no;
+                self.d2201 = d2201;
+                self.d2211 = d2211;
+                self.d3210 = d3210;
+                self.d3222 = d3222;
+                self.d4410 = d4410;
+                self.d4422 = d4422;
+                self.d5220 = d5220;
+                self.d5232 = d5232;
+                self.d5421 = d5421;
+                self.d5433 = d5433;
+                self.xlamo = xlamo;
+                self.xfact = xfact;
+            }
+            if irez == 1 {
+                let g200 = 1.0 + emsq * (-2.5 + 0.8125 * emsq);
+                let g310 = 1.0 + 2.0 * emsq;
+                let g300 = 1.0 + emsq * (-6.0 + 6.60937 * emsq);
+                let f220 = 0.75 * (1.0 + cosim) * (1.0 + cosim);
+                let f311 = 0.9375 * sinim * sinim * (1.0 + 3.0 * cosim) - 0.75 * (1.0 + cosim);
+                let f330 = 1.0 + cosim;
+                let f330 = 1.875 * f330 * f330 * f330;
+                let mut del1 = 3.0 * nm * nm * aonv * aonv;
+                let del2 = 2.0 * del1 * f220 * g200 * 1.7891679e-6;
+                let del3 = 3.0 * del1 * f330 * g300 * 2.2123015e-7 * aonv;
+                let del1 = del1 * f311 * g310 * 2.1460748e-6 * aonv;
+                let xlamo = (self.mo + self.nodeo + self.argpo - theta) % TWOPId;
+                let xfact = self.mdot + xpidot - 4.37526908801129966e-3 + dmdt + domdt + dnodt - no;
+                self.del1 = del1;
+                self.del2 = del2;
+                self.del3 = del3;
+                self.xlamo = xlamo;
+                self.xfact = xfact;
+            }
+            self.xli = self.xlamo;
+            self.xni = no;
+            self.atime = 0.0;
+            self.irez = irez;
+        }
+        // stash deep-space rates and periodics
+        self.dedt = dedt;
+        self.didt = didt;
+        self.dmdt = dmdt;
+        self.dnodt = dnodt;
+        self.domdt = domdt;
+        self.e3 = e3;
+        self.ee2 = ee2;
+        self.peo = peo;
+        self.pgho = pgho;
+        self.pho = pho;
+        self.pinco = pinco;
+        self.plo = plo;
+        self.se2 = se2;
+        self.se3 = se3;
+        self.sgh2 = sgh2;
+        self.sgh3 = sgh3;
+        self.sgh4 = sgh4;
+        self.sh2 = sh2;
+        self.sh3 = sh3;
+        self.si2 = si2;
+        self.si3 = si3;
+        self.sl2 = sl2;
+        self.sl3 = sl3;
+        self.sl4 = sl4;
+        self.xgh2 = xgh2;
+        self.xgh3 = xgh3;
+        self.xgh4 = xgh4;
+        self.xh2 = xh2;
+        self.xh3 = xh3;
+        self.xi2 = xi2;
+        self.xi3 = xi3;
+        self.xl2 = xl2;
+        self.xl3 = xl3;
+        self.xl4 = xl4;
+        self.zmol = zmol;
+        self.zmos = zmos;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn dpper(
+        &self,
+        t: f64,
+        ep: &mut f64,
+        inclp: &mut f64,
+        nodep: &mut f64,
+        argpp: &mut f64,
+        mp: &mut f64,
+    ) {
+        let (pe_raw, pinc_raw, pl_raw, pgh_raw, ph_raw) = dpper_sums(
+            t, self.zmos, self.se2, self.se3, self.si2, self.si3, self.sl2, self.sl3, self.sl4,
+            self.sgh2, self.sgh3, self.sgh4, self.sh2, self.sh3, self.zmol, self.ee2, self.e3,
+            self.xi2, self.xi3, self.xl2, self.xl3, self.xl4, self.xgh2, self.xgh3, self.xgh4,
+            self.xh2, self.xh3,
+        );
+        let mut pe = pe_raw;
+        let mut pinc = pinc_raw;
+        let mut pl = pl_raw;
+        let mut pgh = pgh_raw;
+        let mut ph = ph_raw;
+
+        // init == 'n'
+        pe = pe - self.peo;
+        pinc = pinc - self.pinco;
+        pl = pl - self.plo;
+        pgh = pgh - self.pgho;
+        ph = ph - self.pho;
+        *inclp = *inclp + pinc;
+        *ep = *ep + pe;
+        let sinip = (*inclp).sin();
+        let cosip = (*inclp).cos();
+
+        if *inclp >= 0.2 {
+            ph = ph / sinip;
+            pgh = pgh - cosip * ph;
+            *argpp = *argpp + pgh;
+            *nodep = *nodep + ph;
+            *mp = *mp + pl;
+        } else {
+            let sinop = (*nodep).sin();
+            let cosop = (*nodep).cos();
+            let mut alfdp = sinip * sinop;
+            let mut betdp = sinip * cosop;
+            let dalf = ph * cosop + pinc * cosip * sinop;
+            let dbet = -ph * sinop + pinc * cosip * cosop;
+            alfdp = alfdp + dalf;
+            betdp = betdp + dbet;
+            *nodep = (*nodep).rem_euclid(TWOPId);
+            let xnoh = *nodep;
+            *nodep = alfdp.atan2(betdp);
+            if (*nodep < xnoh) {
+                *nodep = *nodep + TWOPId;
+            } else {
+                *nodep = *nodep - TWOPId;
+            }
+            *mp = *mp + pl;
+            *argpp = (*mp + *argpp + cosip * xnoh) - *mp - cosip * *nodep;
         }
     }
-    Ok((e0, count))
-}
 
-/// Compute perifocal position/velocity from classical elements.
-fn rv_from_elements(
-    p: f64,
-    e: f64,
-    i: f64,
-    node: f64,
-    argp: f64,
-    eo: f64,
-    mu: f64,
-) -> Result<( [f64; 3], [f64; 3] )> {
-    let (sin_e, cos_e) = eo.sin_cos();
-    // True anomaly.
-    let true_an = 2.0 * ((1.0 + e).sqrt() * (eo / 2.0).sin()).atan2(
-        (1.0 - e).sqrt() * (eo / 2.0).cos(),
-    );
-    let _ = true_an;
-    // Radius.
-    let r = p / (1.0 + e * cos_e);
-    // Perifocal position.
-    let (sin_nu, cos_nu) = (eo + e * sin_e).sin_cos(); // nu from E
-    let nu = (sin_nu / cos_nu).atan2(cos_nu.signum().max(1e-12));
-    let _ = nu;
-    let nu = true_an;
-    let (sin_nu, cos_nu) = nu.sin_cos();
+    #[allow(clippy::too_many_arguments)]
+    fn dspace(
+        &mut self,
+        tc: f64,
+        em: &mut f64,
+        argpm: &mut f64,
+        inclm: &mut f64,
+        nodem: &mut f64,
+        nm: &mut f64,
+        mm: &mut f64,
+    ) {
+        let fasx2 = 0.13130908;
+        let fasx4 = 2.8843198;
+        let fasx6 = 0.37448087;
+        let g22 = 5.7686396;
+        let g32 = 0.95240898;
+        let g44 = 1.8014998;
+        let g52 = 1.0508330;
+        let g54 = 4.4108898;
+        let rptim = 4.37526908801129966e-3;
+        let stepp = 720.0;
+        let stepn = -720.0;
+        let step2 = 259200.0;
 
-    let r_pqw = [r * cos_nu, r * sin_nu, 0.0];
+        let mut dndt = 0.0;
+        let theta = (self.gsto + tc * rptim) % TWOPId;
+        *em = *em + self.dedt * tc;
+        *inclm = *inclm + self.didt * tc;
+        *argpm = *argpm + self.domdt * tc;
+        *nodem = *nodem + self.dnodt * tc;
+        *mm = *mm + self.dmdt * tc;
 
-    // Perifocal velocity.
-    let p = p.max(1e-9);
-    let sqrt_mu_p = (mu / p).sqrt();
-    let v_pqw = [
-        -sqrt_mu_p * sin_nu,
-        sqrt_mu_p * (e + cos_nu),
-        0.0,
-    ];
+        let mut ft = 0.0;
+        if self.irez != 0 {
+            if (self.atime == 0.0) || (tc * self.atime <= 0.0) || (tc.abs() < self.atime.abs()) {
+                self.atime = 0.0;
+                self.xni = self.no_kozai;
+                self.xli = self.xlamo;
+            }
+            let delt = if tc > 0.0 { stepp } else { stepn };
+            let mut xli = self.xli;
+            let mut xni = self.xni;
+            let mut atime = self.atime;
+            let mut iretn = 381;
+            let mut xndt = 0.0;
+            let mut xldot = 0.0;
+            let mut xnddt = 0.0;
+            while iretn == 381 {
+                if self.irez != 2 {
+                    xndt = self.del1 * (xli - fasx2).sin()
+                        + self.del2 * (2.0 * (xli - fasx4)).sin()
+                        + self.del3 * (3.0 * (xli - fasx6)).sin();
+                    xldot = xni + self.xfact;
+                    xnddt = self.del1 * (xli - fasx2).cos()
+                        + 2.0 * self.del2 * (2.0 * (xli - fasx4)).cos()
+                        + 3.0 * self.del3 * (3.0 * (xli - fasx6)).cos();
+                    xnddt = xnddt * xldot;
+                } else {
+                    let xomi = self.argpo + self.argpdot * atime;
+                    let x2omi = xomi + xomi;
+                    let x2li = xli + xli;
+                    xndt = self.d2201 * (x2omi + xli - g22).sin()
+                        + self.d2211 * (xli - g22).sin()
+                        + self.d3210 * (xomi + xli - g32).sin()
+                        + self.d3222 * (-xomi + xli - g32).sin()
+                        + self.d4410 * (x2omi + x2li - g44).sin()
+                        + self.d4422 * (x2li - g44).sin()
+                        + self.d5220 * (xomi + xli - g52).sin()
+                        + self.d5232 * (-xomi + xli - g52).sin()
+                        + self.d5421 * (xomi + x2li - g54).sin()
+                        + self.d5433 * (-xomi + x2li - g54).sin();
+                    xldot = xni + self.xfact;
+                    xnddt = self.d2201 * (x2omi + xli - g22).cos()
+                        + self.d2211 * (xli - g22).cos()
+                        + self.d3210 * (xomi + xli - g32).cos()
+                        + self.d3222 * (-xomi + xli - g32).cos()
+                        + self.d5220 * (xomi + xli - g52).cos()
+                        + self.d5232 * (-xomi + xli - g52).cos()
+                        + 2.0
+                            * (self.d4410 * (x2omi + x2li - g44).cos()
+                                + self.d4422 * (x2li - g44).cos()
+                                + self.d5421 * (xomi + x2li - g54).cos()
+                                + self.d5433 * (-xomi + x2li - g54).cos());
+                    xnddt = xnddt * xldot;
+                }
 
-    // Rotate PQW -> TEME via R3(-node) R1(-i) R3(-argp).
-    let (sin_o, cos_o) = node.sin_cos();
-    let (sin_i, cos_i) = i.sin_cos();
-    let (sin_w, cos_w) = argp.sin_cos();
+                if (tc - atime).abs() >= stepp {
+                    iretn = 381;
+                } else {
+                    ft = tc - atime;
+                    iretn = 0;
+                }
+                if iretn == 381 {
+                    xli = xli + xldot * delt + xndt * step2;
+                    xni = xni + xndt * delt + xnddt * step2;
+                    atime = atime + delt;
+                }
+            }
+            self.xli = xli;
+            self.xni = xni;
+            self.atime = atime;
 
-    let r = rotate_pqw_to_inertial(&r_pqw, cos_o, sin_o, cos_i, sin_i, cos_w, sin_w);
-    let v = rotate_pqw_to_inertial(&v_pqw, cos_o, sin_o, cos_i, sin_i, cos_w, sin_w);
-    Ok((r, v))
-}
-
-fn rotate_pqw_to_inertial(
-    v: &[f64; 3],
-    cos_o: f64,
-    sin_o: f64,
-    cos_i: f64,
-    sin_i: f64,
-    cos_w: f64,
-    sin_w: f64,
-) -> [f64; 3] {
-    // Combined rotation matrix elements.
-    let r11 = cos_o * cos_w - sin_o * sin_w * cos_i;
-    let r12 = -cos_o * sin_w - sin_o * cos_w * cos_i;
-    let r21 = sin_o * cos_w + cos_o * sin_w * cos_i;
-    let r22 = -sin_o * sin_w + cos_o * cos_w * cos_i;
-    let r31 = sin_w * sin_i;
-    let r32 = cos_w * sin_i;
-    [
-        r11 * v[0] + r12 * v[1],
-        r21 * v[0] + r22 * v[1],
-        r31 * v[0] + r32 * v[1],
-    ]
+            let nm_local = xni + xndt * ft + xnddt * ft * ft * 0.5;
+            let xl = xli + xldot * ft + xndt * ft * ft * 0.5;
+            if self.irez != 1 {
+                *mm = xl - 2.0 * *nodem + 2.0 * theta;
+                dndt = nm_local - self.no_kozai;
+            } else {
+                *mm = xl - *nodem - *argpm + theta;
+                dndt = nm_local - self.no_kozai;
+            }
+            *nm = self.no_kozai + dndt;
+        }
+    }
 }
