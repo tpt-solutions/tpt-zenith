@@ -10,9 +10,10 @@ use super::TWOPId;
 pub(super) fn gstime(jdut1: f64) -> f64 {
     let deg2rad = std::f64::consts::PI / 180.0;
     let tut1 = (jdut1 - 2451545.0) / 36525.0;
-    let mut temp =
-        -6.2e-6 * tut1 * tut1 * tut1 + 0.093104 * tut1 * tut1 + (876600.0 * 3600.0 + 8640184.812866) * tut1
-            + 67310.54841;
+    let mut temp = -6.2e-6 * tut1 * tut1 * tut1
+        + 0.093104 * tut1 * tut1
+        + (876600.0 * 3600.0 + 8640184.812866) * tut1
+        + 67310.54841;
     temp = (temp * deg2rad / 240.0) % TWOPId;
     if temp < 0.0 {
         temp += TWOPId;

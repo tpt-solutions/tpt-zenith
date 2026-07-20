@@ -6,7 +6,7 @@
 //! tracked satellite sets below the horizon.
 
 use crate::propagator::Propagator;
-use crate::visibility::{GroundStation, VisibilityWindow, visibility_windows};
+use crate::visibility::{visibility_windows, GroundStation, VisibilityWindow};
 
 /// A scheduled handoff from one satellite to the next.
 #[derive(Debug, Clone)]

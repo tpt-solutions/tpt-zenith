@@ -12,6 +12,7 @@ Cargo.lock
 *.dylib
 *.test
 *.out
+!orbital-mechanics/tests/fixtures/sgp4/tcppver.out
 vendor/
 
 # Editors / OS

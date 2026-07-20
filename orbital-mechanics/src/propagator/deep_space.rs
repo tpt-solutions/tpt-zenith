@@ -213,10 +213,12 @@ impl Propagator {
             z2 = 6.0 * (a1 * a3 + a2 * a4) + z32 * emsq;
             z3 = 3.0 * (a3 * a3 + a4 * a4) + z33 * emsq;
             z11 = -6.0 * a1 * a5 + emsq * (-24.0 * x1 * x7 - 6.0 * x3 * x5);
-            z12 = -6.0 * (a1 * a6 + a3 * a5) + emsq * (-24.0 * (x2 * x7 + x1 * x8) - 6.0 * (x3 * x6 + x4 * x5));
+            z12 = -6.0 * (a1 * a6 + a3 * a5)
+                + emsq * (-24.0 * (x2 * x7 + x1 * x8) - 6.0 * (x3 * x6 + x4 * x5));
             z13 = -6.0 * a3 * a6 + emsq * (-24.0 * x2 * x8 - 6.0 * x4 * x6);
             z21 = 6.0 * a2 * a5 + emsq * (24.0 * x1 * x5 - 6.0 * x3 * x7);
-            z22 = 6.0 * (a4 * a5 + a2 * a6) + emsq * (24.0 * (x2 * x5 + x1 * x6) - 6.0 * (x4 * x7 + x3 * x8));
+            z22 = 6.0 * (a4 * a5 + a2 * a6)
+                + emsq * (24.0 * (x2 * x5 + x1 * x6) - 6.0 * (x4 * x7 + x3 * x8));
             z23 = 6.0 * a4 * a6 + emsq * (24.0 * x2 * x6 - 6.0 * x4 * x8);
             z1 = z1 + z1 + _betasq * z31;
             z2 = z2 + z2 + _betasq * z32;
@@ -289,7 +291,9 @@ impl Propagator {
         let xh2 = -2.0 * s2 * z22;
         let xh3 = -2.0 * s2 * (z23 - z21);
 
-        let _ = (zcosgs, zsings, zcosis, zsinis, zcoshl, zsinhl, z11_, z13_, z21_, z23_, z31_, z33_);
+        let _ = (
+            zcosgs, zsings, zcosis, zsinis, zcoshl, zsinhl, z11_, z13_, z21_, z23_, z31_, z33_,
+        );
 
         // Seed the lunar/solar periodic baseline at t=0 (equivalent to the
         // reference's `dpper(init='y')` call, made once right after `dscom`
@@ -345,7 +349,17 @@ impl Propagator {
                 let mut emsq_ = em * em;
                 let eoc = em * emsq_;
                 let g201 = -0.306 - (em - 0.64) * 0.440;
-                let (mut g211, mut g310, mut g322, mut g410, mut g422, mut g520, mut g533, mut g521, mut g532);
+                let (
+                    mut g211,
+                    mut g310,
+                    mut g322,
+                    mut g410,
+                    mut g422,
+                    mut g520,
+                    mut g533,
+                    mut g521,
+                    mut g532,
+                );
                 if em <= 0.65 {
                     g211 = 3.616 - 13.2470 * em + 16.2900 * emsq_;
                     g310 = -19.302 + 117.3900 * em - 228.4190 * emsq_ + 156.5910 * eoc;
@@ -381,12 +395,19 @@ impl Propagator {
                 let f322 = -1.875 * sinim * (1.0 + 2.0 * cosim - 3.0 * cosisq);
                 let f441 = 35.0 * sini2 * f220;
                 let f442 = 39.3750 * sini2 * sini2;
-                let f522 = 9.84375 * sinim * (sini2 * (1.0 - 2.0 * cosim - 5.0 * cosisq)
-                    + 0.33333333 * (-2.0 + 4.0 * cosim + 6.0 * cosisq));
-                let f523 = sinim * (4.92187512 * sini2 * (-2.0 - 4.0 * cosim + 10.0 * cosisq)
-                    + 6.56250012 * (1.0 + 2.0 * cosim - 3.0 * cosisq));
-                let f542 = 29.53125 * sinim * (2.0 - 8.0 * cosim + cosisq * (-12.0 + 8.0 * cosim + 10.0 * cosisq));
-                let f543 = 29.53125 * sinim * (-2.0 - 8.0 * cosim + cosisq * (12.0 + 8.0 * cosim - 10.0 * cosisq));
+                let f522 = 9.84375
+                    * sinim
+                    * (sini2 * (1.0 - 2.0 * cosim - 5.0 * cosisq)
+                        + 0.33333333 * (-2.0 + 4.0 * cosim + 6.0 * cosisq));
+                let f523 = sinim
+                    * (4.92187512 * sini2 * (-2.0 - 4.0 * cosim + 10.0 * cosisq)
+                        + 6.56250012 * (1.0 + 2.0 * cosim - 3.0 * cosisq));
+                let f542 = 29.53125
+                    * sinim
+                    * (2.0 - 8.0 * cosim + cosisq * (-12.0 + 8.0 * cosim + 10.0 * cosisq));
+                let f543 = 29.53125
+                    * sinim
+                    * (-2.0 - 8.0 * cosim + cosisq * (12.0 + 8.0 * cosim - 10.0 * cosisq));
                 let xno2 = nm * nm;
                 let ainv2 = aonv * aonv;
                 let mut temp1 = 3.0 * xno2 * ainv2;
@@ -409,7 +430,8 @@ impl Propagator {
                 let d5421 = temp * f542 * g521;
                 let d5433 = temp * f543 * g533;
                 let xlamo = (self.mo + self.nodeo + self.nodeo - theta - theta) % TWOPId;
-                let xfact = self.mdot + dmdt + 2.0 * (self.nodedot + dnodt - 4.37526908801129966e-3) - no;
+                let xfact =
+                    self.mdot + dmdt + 2.0 * (self.nodedot + dnodt - 4.37526908801129966e-3) - no;
                 self.d2201 = d2201;
                 self.d2211 = d2211;
                 self.d3210 = d3210;

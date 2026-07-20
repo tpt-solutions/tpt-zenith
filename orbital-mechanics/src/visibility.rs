@@ -61,11 +61,7 @@ impl LookAngles {
 ///
 /// `state` is a TEME position; `gmst_rad` is the Greenwich Mean Sidereal Time
 /// (radians) at the observation instant, used to rotate TEME -> ECEF -> SEZ.
-pub fn look_angles(
-    station: &GroundStation,
-    state: &StateVector,
-    gmst_rad: f64,
-) -> LookAngles {
+pub fn look_angles(station: &GroundStation, state: &StateVector, gmst_rad: f64) -> LookAngles {
     let rs = station.ecef_km();
     let r_sat = state.position_km;
 
@@ -157,7 +153,8 @@ pub fn visibility_windows(
         }
         if !visible && prev_visible {
             if let Some(aos) = open_aos.take() {
-                let los = refine_crossing(sat, station, prev_t, t, mask, prev_elev, la.elevation_deg);
+                let los =
+                    refine_crossing(sat, station, prev_t, t, mask, prev_elev, la.elevation_deg);
                 if let Some(w) = build_window(sat, station, aos, los) {
                     windows.push(w);
                 }
@@ -276,7 +273,10 @@ mod tests {
         };
         let windows = visibility_windows(&sat, &gs, 0.0, 24.0 * 60.0, 1.0).unwrap();
         // ISS passes several times per day; at least one window expected.
-        assert!(!windows.is_empty(), "expected at least one visibility window");
+        assert!(
+            !windows.is_empty(),
+            "expected at least one visibility window"
+        );
         for w in &windows {
             assert!(w.max_elevation_deg >= gs.min_elevation_deg);
             assert!(w.los_tsince_min > w.aos_tsince_min);

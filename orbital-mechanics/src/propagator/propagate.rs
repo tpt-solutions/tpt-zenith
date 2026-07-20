@@ -14,7 +14,6 @@ impl Propagator {
         let mut p = self.clone();
         let vkmpersec = EARTH_RADIUS_KM * XKE / 60.0;
 
-
         // --- update for secular gravity and atmospheric drag ---
         let xmdf = p.mo + p.mdot * tsince;
         let argpdf = p.argpo + p.argpdot * tsince;
@@ -27,7 +26,7 @@ impl Propagator {
         let mut tempe = p.bstar * p.cc4 * tsince;
         let mut templ = p.t2cof * t2;
 
-        if p.isimp != 1 && !crate::propagator::SKIP_DRAG {
+        if p.isimp != 1 {
             let delomg = p.omgcof * tsince;
             let delm = p.xmcof * ((1.0 + p.eta * xmdf.cos()).powi(3) - p.delmo);
             let temp = delomg + delm;
@@ -46,7 +45,9 @@ impl Propagator {
 
         if p.method == 'd' {
             let mut tc = tsince;
-            Self::dspace(&mut p, tc, &mut em, &mut argpm, &mut inclm, &mut nodem, &mut nm, &mut mm);
+            Self::dspace(
+                &mut p, tc, &mut em, &mut argpm, &mut inclm, &mut nodem, &mut nm, &mut mm,
+            );
         }
 
         if nm <= 0.0 {
@@ -56,7 +57,9 @@ impl Propagator {
         nm = XKE / am.powf(1.5);
         em = em - tempe;
         if em >= 1.0 || em < -0.001 {
-            return Err(OrbitError::TimeOutOfRange("eccentricity out of range".into()));
+            return Err(OrbitError::TimeOutOfRange(
+                "eccentricity out of range".into(),
+            ));
         }
         if em < 1.0e-6 {
             em = 1.0e-6;
@@ -83,7 +86,9 @@ impl Propagator {
         let mut sinip = sinim;
         let mut cosip = cosim;
         if p.method == 'd' {
-            Self::dpper(&mut p, tsince, &mut ep, &mut xincp, &mut nodep, &mut argpp, &mut mp);
+            Self::dpper(
+                &mut p, tsince, &mut ep, &mut xincp, &mut nodep, &mut argpp, &mut mp,
+            );
             if xincp < 0.0 {
                 xincp = -xincp;
                 nodep = nodep + std::f64::consts::PI;
@@ -167,7 +172,7 @@ impl Propagator {
         let uy = xmy * sinsu + snod * cossu;
         let uz = sini * sinsu;
         let vx = xmx * cossu - cnod * sinsu;
-        let vy = xmy * cossu - snod * cossu;
+        let vy = xmy * cossu - snod * sinsu;
         let vz = sini * cossu;
 
         let position_km = [
@@ -181,6 +186,9 @@ impl Propagator {
             (mvt * uz + rvdot * vz) * vkmpersec,
         ];
 
-        Ok(StateVector { position_km, velocity_kms })
+        Ok(StateVector {
+            position_km,
+            velocity_kms,
+        })
     }
 }

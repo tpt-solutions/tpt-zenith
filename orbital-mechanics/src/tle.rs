@@ -144,9 +144,10 @@ impl Tle {
 
     fn parse_eccentricity(s: &str) -> Result<f64> {
         let s = s.trim();
-        let v: f64 = s
-            .parse()
-            .map_err(|_| OrbitError::ParseField { field: "eccentricity", value: s.to_string() })?;
+        let v: f64 = s.parse().map_err(|_| OrbitError::ParseField {
+            field: "eccentricity",
+            value: s.to_string(),
+        })?;
         Ok(v * 1e-7)
     }
 
@@ -156,7 +157,10 @@ impl Tle {
     /// parsing.
     fn parse_exp_field(s: &str, field: &'static str) -> Result<f64> {
         let s = s.trim();
-        if s.is_empty() || s.chars().all(|c| c == '0' || c == ' ' || c == '-' || c == '+') {
+        if s.is_empty()
+            || s.chars()
+                .all(|c| c == '0' || c == ' ' || c == '-' || c == '+')
+        {
             return Ok(0.0);
         }
         let sign = if s.starts_with('-') { "-" } else { "" };
@@ -173,17 +177,19 @@ impl Tle {
             None => (digits, ""),
         };
         let combined = format!("{sign}0.{mantissa}e{exp}");
-        let v: f64 = combined
-            .parse()
-            .map_err(|_| OrbitError::ParseField { field, value: s.to_string() })?;
+        let v: f64 = combined.parse().map_err(|_| OrbitError::ParseField {
+            field,
+            value: s.to_string(),
+        })?;
         Ok(v)
     }
 
     fn parse_decimal_field(s: &str, field: &'static str) -> Result<f64> {
         let s = s.trim();
-        let v: f64 = s
-            .parse()
-            .map_err(|_| OrbitError::ParseField { field, value: s.to_string() })?;
+        let v: f64 = s.parse().map_err(|_| OrbitError::ParseField {
+            field,
+            value: s.to_string(),
+        })?;
         Ok(v)
     }
 
@@ -191,7 +197,10 @@ impl Tle {
         let v = s[range]
             .trim()
             .parse()
-            .map_err(|_| OrbitError::ParseField { field, value: s.to_string() })?;
+            .map_err(|_| OrbitError::ParseField {
+                field,
+                value: s.to_string(),
+            })?;
         Ok(v)
     }
 
@@ -199,7 +208,10 @@ impl Tle {
         let v = s[range]
             .trim()
             .parse()
-            .map_err(|_| OrbitError::ParseField { field, value: s.to_string() })?;
+            .map_err(|_| OrbitError::ParseField {
+                field,
+                value: s.to_string(),
+            })?;
         Ok(v)
     }
 

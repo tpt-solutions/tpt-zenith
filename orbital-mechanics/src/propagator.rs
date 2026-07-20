@@ -62,10 +62,6 @@ impl StateVector {
 const TWOPId: f64 = 2.0 * std::f64::consts::PI;
 const X2O3: f64 = 2.0 / 3.0;
 
-/// Diagnostic escape hatch: when true, the near-earth drag/secular extra
-/// terms (d2..d4, t3cof..t5cof, omgcof/xmcof) are skipped during propagation.
-pub const SKIP_DRAG: bool = false;
-
 /// Initialized element set for repeated SGP4/SDP4 propagation.
 ///
 /// Created via [`Propagator::from_tle`]. Holds the full `elsetrec` state from

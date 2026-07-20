@@ -65,8 +65,8 @@ impl ConstellationSpec {
                     break;
                 }
                 let plane_offset = 360.0 * (s as f64) / (per_plane as f64);
-                let phase_offset = 360.0 * (self.phase_factor as f64) * (s as f64)
-                    / (self.total as f64);
+                let phase_offset =
+                    360.0 * (self.phase_factor as f64) * (s as f64) / (self.total as f64);
                 let mean_anomaly = (plane_offset + phase_offset).rem_euclid(360.0);
                 tles.push(self.make_tle(count, raan, mean_anomaly, mean_motion));
                 count += 1;
@@ -114,7 +114,11 @@ mod tests {
 
     #[test]
     fn generates_requested_count() {
-        let spec = ConstellationSpec { total: 42, planes: 6, ..Default::default() };
+        let spec = ConstellationSpec {
+            total: 42,
+            planes: 6,
+            ..Default::default()
+        };
         let tles = spec.generate();
         assert_eq!(tles.len(), 42);
     }

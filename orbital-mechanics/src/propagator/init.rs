@@ -139,9 +139,16 @@ impl Propagator {
             let posq = (ao * omeosq) * (ao * omeosq);
             let rp = ao * (1.0 - ecco);
             let gsto = gstime(epoch + 2433281.5);
-            (ao, con42, cosio, cosio2, eccsq, omeosq, posq, rp, rteosq, sinio, gsto)
+            (
+                ao, con42, cosio, cosio2, eccsq, omeosq, posq, rp, rteosq, sinio, gsto,
+            )
         };
         p.gsto = gsto;
+        // The corrected (Brouwer "unkozai") mean motion computed above only
+        // lives inside that block's scope; every secular-rate formula below
+        // (cc1/cc4/cc5, mdot, argpdot, nodedot, dsinit's `no`, and the isimp
+        // perigee test) must use it, not the raw TLE mean motion.
+        let no = p.no_kozai;
 
         if omeosq >= 0.0 || no >= 0.0 {
             p.isimp = 0;
@@ -169,32 +176,43 @@ impl Propagator {
             let psisq = (1.0 - etasq).abs();
             let coef = qzms24 * tsi.powi(4);
             let coef1 = coef / psisq.powf(3.5);
-            let cc2 = coef1 * no * (ao * (1.0 + 1.5 * etasq + eeta * (4.0 + etasq))
-                + 0.375 * J2 * tsi / psisq * p.con41 * (8.0 + 3.0 * etasq * (8.0 + etasq)));
+            let cc2 = coef1
+                * no
+                * (ao * (1.0 + 1.5 * etasq + eeta * (4.0 + etasq))
+                    + 0.375 * J2 * tsi / psisq * p.con41 * (8.0 + 3.0 * etasq * (8.0 + etasq)));
             p.cc1 = p.bstar * cc2;
             let mut cc3 = 0.0;
             if p.ecco > 1.0e-4 {
                 cc3 = -2.0 * coef * tsi * J3OJ2 * no * sinio / p.ecco;
             }
             p.x1mth2 = 1.0 - cosio2;
-            p.cc4 = 2.0 * no * coef1 * ao * omeosq
+            p.cc4 = 2.0
+                * no
+                * coef1
+                * ao
+                * omeosq
                 * (p.eta * (2.0 + 0.5 * etasq) + p.ecco * (0.5 + 2.0 * etasq)
                     - J2 * tsi / (ao * psisq)
                         * (-3.0 * p.con41 * (1.0 - 2.0 * eeta + etasq * (1.5 - 0.5 * eeta))
-                            + 0.75 * p.x1mth2 * (2.0 * etasq - eeta * (1.0 + etasq)) * (2.0 * p.argpo).cos()));
+                            + 0.75
+                                * p.x1mth2
+                                * (2.0 * etasq - eeta * (1.0 + etasq))
+                                * (2.0 * p.argpo).cos()));
             p.cc5 = 2.0 * coef1 * ao * omeosq * (1.0 + 2.75 * (etasq + eeta) + eeta * etasq);
             let cosio4 = cosio2 * cosio2;
             let temp1 = 1.5 * J2 * pinvsq * no;
             let temp2 = 0.5 * temp1 * J2 * pinvsq;
             let temp3 = -0.46875 * J4 * pinvsq * pinvsq * no;
-            p.mdot = no + 0.5 * temp1 * rteosq * p.con41
+            p.mdot = no
+                + 0.5 * temp1 * rteosq * p.con41
                 + 0.0625 * temp2 * rteosq * (13.0 - 78.0 * cosio2 + 137.0 * cosio4);
             p.argpdot = -0.5 * temp1 * con42
                 + 0.0625 * temp2 * (7.0 - 114.0 * cosio2 + 395.0 * cosio4)
                 + temp3 * (3.0 - 36.0 * cosio2 + 49.0 * cosio4);
             let xhdot1 = -temp1 * cosio;
             p.nodedot = xhdot1
-                + (0.5 * temp2 * (4.0 - 19.0 * cosio2) + 2.0 * temp3 * (3.0 - 7.0 * cosio2)) * cosio;
+                + (0.5 * temp2 * (4.0 - 19.0 * cosio2) + 2.0 * temp3 * (3.0 - 7.0 * cosio2))
+                    * cosio;
             let xpidot = p.argpdot + p.nodedot;
             p.omgcof = p.bstar * cc3 * p.argpo.cos();
             p.xmcof = 0.0;
@@ -224,8 +242,11 @@ impl Propagator {
                 p.d4 = 0.5 * temp * ao * tsi * (221.0 * ao + 31.0 * sfour) * p.cc1;
                 p.t3cof = p.d2 + 2.0 * cc1sq;
                 p.t4cof = 0.25 * (3.0 * p.d3 + p.cc1 * (12.0 * p.d2 + 10.0 * cc1sq));
-                p.t5cof = 0.2 * (3.0 * p.d4 + 12.0 * p.cc1 * p.d3 + 6.0 * p.d2 * p.d2
-                    + 15.0 * cc1sq * (2.0 * p.d2 + cc1sq));
+                p.t5cof = 0.2
+                    * (3.0 * p.d4
+                        + 12.0 * p.cc1 * p.d3
+                        + 6.0 * p.d2 * p.d2
+                        + 15.0 * cc1sq * (2.0 * p.d2 + cc1sq));
             }
         }
 
