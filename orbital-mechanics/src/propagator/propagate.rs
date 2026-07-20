@@ -181,10 +181,6 @@ impl Propagator {
             (mvt * uz + rvdot * vz) * vkmpersec,
         ];
 
-        if (p.ecco > 0.0085 && p.ecco < 0.0088) && (tsince - 120.0).abs() < 1.0 {
-            eprintln!("MAIN t={} am={} tempe={} templ={} mm={} mo={} mdot={} no_kozai={} xmdf={} bstar={} cc4={} cc5={} cc1={} sinmo={} temp={}", tsince, am, tempe, templ, mm, p.mo, p.mdot, p.no_kozai, xmdf, p.bstar, p.cc4, p.cc5, p.cc1, p.sinmao, temp);
-        }
-
         Ok(StateVector { position_km, velocity_kms })
     }
 }

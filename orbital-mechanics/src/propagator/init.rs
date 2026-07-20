@@ -208,10 +208,6 @@ impl Propagator {
             p.sinmao = p.mo.sin();
             p.x7thm1 = 7.0 * cosio2 - 1.0;
 
-            if p.ecco > 0.0085 && p.ecco < 0.0088 {
-                eprintln!("MAININIT no={} isimp={} ao={} rp={} threshold={} cc1={} cc2={} cc4={} omgcof={} xmcof={}", p.no_kozai, p.isimp, ao, ao*(1.0-p.ecco), 220.0/EARTH_RADIUS_KM+1.0, p.cc1, cc2, p.cc4, p.omgcof, p.xmcof);
-            }
-
             // --- deep space initialization ---
             if (TWOPId / no) >= 225.0 {
                 p.method = 'd';
