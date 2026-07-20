@@ -279,7 +279,18 @@ impl Propagator {
         let radiusearthkm = EARTH_RADIUS_KM;
         let x2o3 = 2.0 / 3.0;
 
-        let init = Sgp4Init::new(self.no_kozai, self.e, self.i, self.nodeo, self.argpo, self.mo, self.bstar, radiusearthkm, mu, x2o3)?;
+        let init = Sgp4Init::new(
+            self.no_kozai,
+            self.e,
+            self.i,
+            self.nodeo,
+            self.argpo,
+            self.mo,
+            self.bstar,
+            radiusearthkm,
+            mu,
+            x2o3,
+        )?;
 
         let (p, e, i, node, argp, m, _) = sgp4_tsince(&init, tsince, radiusearthkm, mu, x2o3)?;
 
@@ -293,7 +304,10 @@ impl Propagator {
 
         // Position and velocity in perifocal frame.
         let (r, v) = rv_from_elements(p, e, i, node, argp, eo, mu)?;
-        Ok(StateVector { position_km: r, velocity_kms: v })
+        Ok(StateVector {
+            position_km: r,
+            velocity_kms: v,
+        })
     }
 
     // ------------------------------------------------------------------
@@ -307,18 +321,40 @@ impl Propagator {
         // Deep-space secular and periodic corrections produce time-updated
         // mean elements (em, argpm, inclm, nodem, mm).
         let mut deep = self.deep;
-        let (em, argpm, inclm, nodem, mm) =
-            Self::dspace(&mut deep, tsince, self.no_kozai, self.e, self.i, self.argpo, self.nodeo, self.mo)?;
+        let (em, argpm, inclm, nodem, mm) = Self::dspace(
+            &mut deep,
+            tsince,
+            self.no_kozai,
+            self.e,
+            self.i,
+            self.argpo,
+            self.nodeo,
+            self.mo,
+        )?;
 
         // After deep-space corrections, propagate as a near-Earth orbit using
         // the secularly-updated elements, with the deep-space perturbing
         // accelerations folded into the equivalent mean motion.
-        let init = Sgp4Init::new(self.no_kozai, em, inclm, nodem, argpm, mm, self.bstar, radiusearthkm, mu, x2o3)?;
+        let init = Sgp4Init::new(
+            self.no_kozai,
+            em,
+            inclm,
+            nodem,
+            argpm,
+            mm,
+            self.bstar,
+            radiusearthkm,
+            mu,
+            x2o3,
+        )?;
 
         let (p, e, i, node, argp, m, _) = sgp4_tsince(&init, tsince, radiusearthkm, mu, x2o3)?;
         let (eo, _) = solve_kepler(m, e)?;
         let (r, v) = rv_from_elements(p, e, i, node, argp, eo, mu)?;
-        Ok(StateVector { position_km: r, velocity_kms: v })
+        Ok(StateVector {
+            position_km: r,
+            velocity_kms: v,
+        })
     }
 
     // SDP4 initialization: precompute lunar/solar constants and resonance terms.
@@ -627,7 +663,18 @@ impl Sgp4Init {
         init.gsto = (nodeo + EARTH_ROTATION_RAD_S * 0.0).rem_euclid(2.0 * std::f64::consts::PI);
 
         // Compute perigee / apogee and other init terms.
-        sgp4_init_detail(&mut init, no_kozai, e, i, argpo, mo, bstar, radiusearthkm, mu, x2o3)?;
+        sgp4_init_detail(
+            &mut init,
+            no_kozai,
+            e,
+            i,
+            argpo,
+            mo,
+            bstar,
+            radiusearthkm,
+            mu,
+            x2o3,
+        )?;
 
         Ok(init)
     }
@@ -703,7 +750,8 @@ fn sgp4_init_detail(
     let temp1 = 1.5 * J2 * pinv * init.x1mth2;
     let temp2 = 0.5 * temp1 * J2 * pinv;
     let temp3 = -0.46875 * J2 * J2 * pinv * pinv * init.con41;
-    init.mdot = no_kozai + 0.5 * temp1 * eta * eta * init.con42
+    init.mdot = no_kozai
+        + 0.5 * temp1 * eta * eta * init.con42
         + 0.5 * temp2 * eta * (4.0 + 2.5 * eta * eta)
         + 0.5 * temp3 * eta * (2.0 + 1.5 * eta * eta);
     let _ = temp3;
@@ -732,9 +780,15 @@ fn sgp4_init_detail(
     let _ = etasq;
 
     init.cc1 = init.c1 * (1.0 + 2.25 * etasq + 1.5 * eeta);
-    init.cc4 = 2.0 * pinv * init.posq * (1.0 - eeta + 1.5 * etasq * (1.0 + eeta))
+    init.cc4 = 2.0
+        * pinv
+        * init.posq
+        * (1.0 - eeta + 1.5 * etasq * (1.0 + eeta))
         * (2.5 * (init.c1 + bstar) + init.c4);
-    init.cc5 = 2.0 * pinv * init.posq * (1.0 + 2.75 * (eeta + etasq))
+    init.cc5 = 2.0
+        * pinv
+        * init.posq
+        * (1.0 + 2.75 * (eeta + etasq))
         * (2.5 * (init.c1 + bstar) + init.c5);
 
     init.delmo = (1.0 - eta * eta).powf(1.5);
@@ -791,17 +845,22 @@ fn sgp4_tsince(
 
     // Atmospheric drag: secular periodics update a and e.
     let em = e - init.bstar * init.c4 * tsince;
-    let mut a = init.aodp * (1.0 - init.c1 * tsince - init.d2 * tsince * tsince
-        - init.d3 * tsince * tsince * tsince
-        - init.d4 * tsince * tsince * tsince * tsince);
+    let mut a = init.aodp
+        * (1.0
+            - init.c1 * tsince
+            - init.d2 * tsince * tsince
+            - init.d3 * tsince * tsince * tsince
+            - init.d4 * tsince * tsince * tsince * tsince);
     // recovered mean motion
     let _ = a;
     let p = init.pinv.recip();
     let _ = p;
 
     // Use the original perifocal parameter p from the epoch (drag-corrected p).
-    let p = init.aodp * (1.0 - em * em) * radiusearthkm * radiusearthkm / (init.radiusearthkm * init.radiusearthkm);
-    let p = init.aodp * (1.0 - em * em) * radiusearthkm * radiusearthkm / (init.radiusearthkm.powi(2));
+    let p = init.aodp * (1.0 - em * em) * radiusearthkm * radiusearthkm
+        / (init.radiusearthkm * init.radiusearthkm);
+    let p =
+        init.aodp * (1.0 - em * em) * radiusearthkm * radiusearthkm / (init.radiusearthkm.powi(2));
     let p = init.aodp * (1.0 - em * em);
     let _ = p;
 
@@ -813,7 +872,15 @@ fn sgp4_tsince(
     let p_km = p_km; // aodp is in km (a1 computed from mu in km^3/s^2)
     let _ = mu;
 
-    Ok((p_km, em, i, node, argp, m, (init.mdot, init.nodedot, init.argpdot)))
+    Ok((
+        p_km,
+        em,
+        i,
+        node,
+        argp,
+        m,
+        (init.mdot, init.nodedot, init.argpdot),
+    ))
 }
 
 /// Solve Kepler's equation M = E - e sin E via Newton-Raphson.
@@ -842,12 +909,11 @@ fn rv_from_elements(
     argp: f64,
     eo: f64,
     mu: f64,
-) -> Result<( [f64; 3], [f64; 3] )> {
+) -> Result<([f64; 3], [f64; 3])> {
     let (sin_e, cos_e) = eo.sin_cos();
     // True anomaly.
-    let true_an = 2.0 * ((1.0 + e).sqrt() * (eo / 2.0).sin()).atan2(
-        (1.0 - e).sqrt() * (eo / 2.0).cos(),
-    );
+    let true_an =
+        2.0 * ((1.0 + e).sqrt() * (eo / 2.0).sin()).atan2((1.0 - e).sqrt() * (eo / 2.0).cos());
     let _ = true_an;
     // Radius.
     let r = p / (1.0 + e * cos_e);
@@ -863,11 +929,7 @@ fn rv_from_elements(
     // Perifocal velocity.
     let p = p.max(1e-9);
     let sqrt_mu_p = (mu / p).sqrt();
-    let v_pqw = [
-        -sqrt_mu_p * sin_nu,
-        sqrt_mu_p * (e + cos_nu),
-        0.0,
-    ];
+    let v_pqw = [-sqrt_mu_p * sin_nu, sqrt_mu_p * (e + cos_nu), 0.0];
 
     // Rotate PQW -> TEME via R3(-node) R1(-i) R3(-argp).
     let (sin_o, cos_o) = node.sin_cos();
