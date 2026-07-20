@@ -97,4 +97,41 @@ mod tests {
         let plan = plan_handoffs(&[], &gs, 0.0, 200.0, 2.0);
         assert!(plan.is_empty());
     }
+
+    #[test]
+    fn finds_handoff_across_a_leo_constellation() {
+        use crate::constellation::ConstellationSpec;
+
+        let spec = ConstellationSpec {
+            total: 24,
+            planes: 4,
+            inclination_deg: 53.0,
+            altitude_km: 550.0,
+            ..Default::default()
+        };
+        let satellites: Vec<Propagator> = spec
+            .generate()
+            .iter()
+            .map(|t| Propagator::from_tle(t).unwrap())
+            .collect();
+        let gs = GroundStation {
+            latitude_deg: 40.0,
+            longitude_deg: -75.0,
+            altitude_km: 0.0,
+            min_elevation_deg: 10.0,
+        };
+        let plan = plan_handoffs(&satellites, &gs, 0.0, 24.0 * 60.0, 1.0);
+        assert!(
+            !plan.is_empty(),
+            "expected at least one handoff across a 24-satellite constellation over 24h"
+        );
+        for h in &plan {
+            assert_ne!(h.from_index, h.to_index);
+            // The incoming satellite's window covers `los` by construction,
+            // but AOS/LOS crossings are themselves refined to within the
+            // step/interpolation tolerance, so allow a little slack right at
+            // a window edge rather than requiring an exact mask crossing.
+            assert!(h.incoming_elevation_deg >= gs.min_elevation_deg - 1.0);
+        }
+    }
 }
