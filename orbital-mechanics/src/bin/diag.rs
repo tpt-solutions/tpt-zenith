@@ -59,7 +59,7 @@ fn main() {
     let out = include_str!("../../tests/fixtures/sgp4/tcppver.out");
     let cases = parse_cases(tle);
     let blocks = parse_expected(out);
-    let detail: std::collections::HashSet<&str> = ["28129","28057","06251","28350","88888"].iter().copied().collect();
+    let detail: std::collections::HashSet<&str> = ["88888"].iter().copied().collect();
     let mut res: HashMap<String,(f64,String)> = HashMap::new();
     for ((l1,l2),rows) in cases.iter().zip(blocks.iter()) {
         let sat = l1[2..7].to_string();
@@ -72,10 +72,9 @@ fn main() {
                 Ok(s) => {
                     let e = perr(&s, &r.pos);
                     if e>worst { worst = e; kind="cm-fail".to_string(); }
-                    if detail.contains(sat.as_str()) && (r.tsince as i64) == 0 {
-                        println!("DETAIL {sat} t=0 ref={:?}", r.pos);
-                        println!("DETAIL {sat} t=0 got={:?}", s.position_km);
-                        println!("DETAIL {sat} t=0 vel={:?}", s.velocity_kms);
+                    if detail.contains(sat.as_str()) {
+                        println!("DETAIL {sat} t={:.1} ref={:?}", r.tsince, r.pos);
+                        println!("DETAIL {sat} t={:.1} got={:?}", r.tsince, s.position_km);
                     }
                 }
                 Err(_) => { kind = "prop_err".to_string(); }

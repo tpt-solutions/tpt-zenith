@@ -40,6 +40,10 @@ impl StateVector {
 const TWOPId: f64 = 2.0 * std::f64::consts::PI;
 const X2O3: f64 = 2.0 / 3.0;
 
+/// Diagnostic escape hatch: when true, the near-earth drag/secular extra
+/// terms (d2..d4, t3cof..t5cof, omgcof/xmcof) are skipped during propagation.
+pub const SKIP_DRAG: bool = false;
+
 /// Initialized element set for repeated SGP4/SDP4 propagation.
 ///
 /// Created via [`Propagator::from_tle`]. Holds the full `elsetrec` state from
@@ -343,7 +347,11 @@ impl Propagator {
             let del = d1 / (adel * adel);
             let no = no / (1.0 + del);
             p.no_kozai = no;
-            let ao = (XKE / no).powf(X2O3);
+            // Vallado uses `aodp = ao/(1 - delo)` (delo == `del` here) as the
+            // semi-major axis in every near-earth secular coefficient formula
+            // and in the perigee/isimp classification. Using the raw `ao`
+            // misclassifies perigee and corrupts the coefficient scales.
+            let ao = adel / (1.0 - del);
             let sinio = inclo.sin();
             let _po = ao * omeosq;
             let con42 = 1.0 - 5.0 * cosio2;
@@ -427,6 +435,10 @@ impl Propagator {
             p.sinmao = p.mo.sin();
             p.x7thm1 = 7.0 * cosio2 - 1.0;
 
+            if p.ecco > 0.0085 && p.ecco < 0.0088 {
+                eprintln!("MAININIT no={} isimp={} ao={} rp={} threshold={} cc1={} cc2={} cc4={} omgcof={} xmcof={}", p.no_kozai, p.isimp, ao, ao*(1.0-p.ecco), 220.0/EARTH_RADIUS_KM+1.0, p.cc1, cc2, p.cc4, p.omgcof, p.xmcof);
+            }
+
             // --- deep space initialization ---
             if (TWOPId / no) >= 225.0 {
                 p.method = 'd';
@@ -471,7 +483,7 @@ impl Propagator {
         let mut tempe = p.bstar * p.cc4 * tsince;
         let mut templ = p.t2cof * t2;
 
-        if p.isimp != 1 {
+        if p.isimp != 1 && !crate::propagator::SKIP_DRAG {
             let delomg = p.omgcof * tsince;
             let delm = p.xmcof * ((1.0 + p.eta * xmdf.cos()).powi(3) - p.delmo);
             let temp = delomg + delm;
@@ -629,6 +641,10 @@ impl Propagator {
             (mvt * uy + rvdot * vy) * vkmpersec,
             (mvt * uz + rvdot * vz) * vkmpersec,
         ];
+
+        if (p.ecco > 0.0085 && p.ecco < 0.0088) && (tsince - 120.0).abs() < 1.0 {
+            eprintln!("MAIN t={} am={} tempe={} templ={} mm={} mo={} mdot={} no_kozai={} xmdf={} bstar={} cc4={} cc5={} cc1={} sinmo={} temp={}", tsince, am, tempe, templ, mm, p.mo, p.mdot, p.no_kozai, xmdf, p.bstar, p.cc4, p.cc5, p.cc1, p.sinmao, temp);
+        }
 
         Ok(StateVector { position_km, velocity_kms })
     }
