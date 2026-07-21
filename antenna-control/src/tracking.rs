@@ -203,8 +203,14 @@ impl<'a> Tracker<'a> {
 pub fn angular_separation_deg(az1_deg: f64, el1_deg: f64, az2_deg: f64, el2_deg: f64) -> f64 {
     let v1 = unit_vector(az1_deg, el1_deg);
     let v2 = unit_vector(az2_deg, el2_deg);
-    let dot = (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]).clamp(-1.0, 1.0);
-    dot.acos().to_degrees()
+    let dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+    let cross = [
+        v1[1] * v2[2] - v1[2] * v2[1],
+        v1[2] * v2[0] - v1[0] * v2[2],
+        v1[0] * v2[1] - v1[1] * v2[0],
+    ];
+    let sin_angle = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
+    sin_angle.atan2(dot).to_degrees()
 }
 
 /// Unit pointing vector in a local east-north-up frame.
